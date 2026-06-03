@@ -1,0 +1,20 @@
+@import url('./styles/variable.css');
+@import url('./styles/reset.css');
+@import url('./styles/layout.css');
+
+@import url('./styles/auth.css');
+
+@import url('./styles/navbar.css');
+@import url('./styles/sidebar.css');
+
+@import url('./styles/dashboard.css');
+@import url('./styles/projects.css');
+@import url('./styles/tasks.css');
+@import url('./styles/reports.css');
+@import url('./styles/teams.css');
+
+@import url('./styles/cards.css');
+@import url('./styles/forms.css');
+@import url('./styles/modal.css');
+
+@import url('./styles/responsive.css');

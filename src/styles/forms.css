@@ -1,0 +1,38 @@
+input,
+select,
+textarea {
+  width: 100%;
+
+  height: 48px;
+
+  padding: 0 16px;
+
+  border: 1px solid var(--border);
+
+  border-radius: var(--radius-md);
+
+  background: var(--surface);
+
+  outline: none;
+
+  transition: var(--transition);
+}
+
+textarea {
+  height: 120px;
+  padding-top: 14px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+
+  box-shadow:
+    0 0 0 4px rgba(37, 99, 235, 0.1);
+}
+
+button {
+  border: none;
+  cursor: pointer;
+}

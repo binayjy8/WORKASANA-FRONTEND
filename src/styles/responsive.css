@@ -1,0 +1,19 @@
+@media (max-width: 980px) {
+
+  .dashboard-layout,
+  .project-layout {
+    grid-template-columns: 1fr;
+  }
+
+}
+
+@media (max-width: 760px) {
+
+  .page-header--with-action,
+  .dashboard-header,
+  .project-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+}
