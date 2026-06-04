@@ -1,12 +1,8 @@
 import { Link, useParams } from 'react-router-dom'
-
 import { updateTask } from '../services/taskApi'
-
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
-
-import {
-  getEntityId,
-  isSameEntityId,
+import { getEntityId, isSameEntityId 
+  
 } from '../utils/entity'
 
 import {
