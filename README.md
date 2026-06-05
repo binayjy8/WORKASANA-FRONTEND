@@ -1,165 +1,82 @@
-# Workasana - Project Management Platform
+# Workasana — Project Management App
 
-A full-stack MERN project management application built with React, Node.js, Express, MongoDB, and JWT authentication.
+A full-stack project management application built with React (frontend) and Express + MongoDB (backend).
 
 ## Features
 
-* User Authentication (JWT)
-* Protected Routes
-* Project Management
-* Task Management
-* Team Management
-* Task Status Updates
-* Dashboard Overview
-* Search Functionality
-* MongoDB Database Integration
-* REST API Architecture
-* Responsive UI
-* Backend Deployment on Vercel
-
----
+- **Authentication** — Signup, Login, JWT-based protected routes
+- **Dashboard** — Overview of projects, tasks with quick filters
+- **Projects** — Create and manage projects, view tasks per project
+- **Tasks** — Kanban board (To Do / In Progress / Completed / Blocked), create, edit, delete tasks with tag chips, owner multi-select, due date
+- **Teams** — View members and teams, create new teams, filter by member or team
+- **Reports** — Chart.js visualizations — status pie chart, tasks closed by team/owner/project, pending work bar chart
+- **Settings** — Profile management, notification preferences, sign out
 
 ## Tech Stack
 
-### Frontend
+- **Frontend:** React, React Router, Axios, Chart.js, React Icons
+- **Backend:** Express.js, MongoDB, Mongoose, JWT
 
-* React.js
-* React Router DOM
-* Axios
-* React Icons
-* CSS
+## Getting Started
 
-### Backend
-
-* Node.js
-* Express.js
-* MongoDB Atlas
-* Mongoose
-* JWT Authentication
-* bcryptjs
-
----
-
-## Folder Structure
+### 1. Clone the repo
 
 ```bash
-client/
-server/
+git clone <your-repo-url>
+cd WORKASANA
 ```
 
----
-
-## Environment Variables
-
-### Backend `.env`
-
-```env
-MONGODB=your_mongodb_connection_string
-JWT_SECRET=your_secret_key
-PORT=5000
-```
-
-### Frontend `.env`
-
-```env
-VITE_API_URL=your_backend_url/api
-```
-
----
-
-## Installation
-
-### Clone Repository
+### 2. Install dependencies
 
 ```bash
-git clone https://github.com/your-username/workasana.git
-```
-
----
-
-### Backend Setup
-
-```bash
-cd server
 npm install
+```
+
+### 3. Set up environment variables
+
+Create a `.env` file in the root:
+
+```
+VITE_API_URL=https://workasana-backend-iota.vercel.app/api
+```
+
+### 4. Run the app
+
+```bash
 npm run dev
 ```
 
----
+Open [http://localhost:5173](http://localhost:5173)
 
-### Frontend Setup
+## Project Structure
 
-```bash
-cd client
-npm install
-npm run dev
+```
+src/
+├── App.jsx
+├── index.css
+├── pages/          # Login, Signup, Dashboard, Projects, Tasks, Teams, Reports, Settings
+├── components/     # Sidebar, Navbar, ProjectCard, TaskCard, TeamCard, EmptyState
+├── layouts/        # MainLayout
+├── hooks/          # useWorkspaceData (global state)
+├── services/       # api.js, authApi.js, taskApi.js
+├── utils/          # entity.js, taskUtils.js
+└── styles/         # CSS files per component/page
 ```
 
----
+## Backend API
 
-## API Routes
+Base URL: `https://workasana-backend-iota.vercel.app/api`
 
-### Auth
-
-* POST `/api/auth/register`
-* POST `/api/auth/login`
-
-### Projects
-
-* GET `/api/projects`
-* POST `/api/projects`
-
-### Tasks
-
-* GET `/api/tasks`
-* POST `/api/tasks`
-* PUT `/api/tasks/:id`
-* DELETE `/api/tasks/:id`
-
-### Teams
-
-* GET `/api/teams`
-* POST `/api/teams`
-
----
-
-## Demo Credentials
-
-```text
-Email: chinmay@gmail.com
-Password: 123456
-```
-
----
-
-## Live Demo
-
-Frontend:
-
-```text
-Add frontend deployment URL here
-```
-
-Backend:
-
-```text
-Add backend deployment URL here
-```
-
----
-
-
-## Future Improvements
-
-* Drag & Drop Kanban Board
-* Role-Based Authentication
-* Notifications
-* Dark Mode
-* Real-time Collaboration
-* Analytics Dashboard
-
----
-
-## Author
-
-Built by Binay using the MERN Stack.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | /auth/register | Create account |
+| POST | /auth/login | Login |
+| GET | /projects | Get all projects |
+| POST | /projects | Create project |
+| GET | /tasks | Get all tasks |
+| POST | /tasks | Create task |
+| PUT | /tasks/:id | Update task |
+| DELETE | /tasks/:id | Delete task |
+| GET | /teams | Get all teams |
+| POST | /teams | Create team |
+| GET | /users | Get all users |

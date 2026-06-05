@@ -1,19 +1,212 @@
-@media (max-width: 980px) {
+/* ── Responsive ─────────────────────────────────────── */
 
-  .dashboard-layout,
-  .project-layout {
+/* ─ Tablet (≤1024px) ─────────────────────────────────── */
+@media (max-width: 1024px) {
+
+  :root {
+    --sidebar-width: 200px;
+  }
+
+  .task-board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .report-charts-grid {
     grid-template-columns: 1fr;
   }
 
+  .task-details-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-@media (max-width: 760px) {
+/* ─ Tablet narrow (≤900px) ──────────────────────────── */
+@media (max-width: 900px) {
 
-  .page-header--with-action,
-  .dashboard-header,
-  .project-header {
-    flex-direction: column;
-    align-items: flex-start;
+  .dashboard-stats-row {
+    grid-template-columns: repeat(2, 1fr);
   }
 
+  .teams-stats-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .projects-stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .modal-row {
+    grid-template-columns: 1fr;
+  }
+
+  .navbar__search input {
+    width: 130px;
+  }
+}
+
+/* ─ Mobile (≤768px) ─────────────────────────────────── */
+@media (max-width: 768px) {
+
+  /* Sidebar hidden on mobile */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+
+  .sidebar--open {
+    transform: translateX(0);
+  }
+
+  .app-main {
+    margin-left: 0;
+  }
+
+  .app-content {
+    padding: 1rem;
+  }
+
+  /* Navbar */
+  .navbar {
+    padding: 0 1rem;
+  }
+
+  .navbar__title p {
+    display: none;
+  }
+
+  .navbar__profile-name {
+    display: none;
+  }
+
+  .navbar__search {
+    display: none;
+  }
+
+  /* Dashboard */
+  .dashboard-stats-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .page-header--with-action {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .project-page-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .project-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .tasks-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .task-details-header {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  /* Task board: single column on mobile */
+  .task-board {
+    grid-template-columns: 1fr;
+  }
+
+  /* Projects grid */
+  .projects-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .projects-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Teams */
+  .teams-stats-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .team-member-header {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .team-member-stats {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Filter grid */
+  .filter-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Modal */
+  .task-modal,
+  .project-modal {
+    max-width: 100%;
+    border-radius: 12px 12px 0 0;
+    margin-top: auto;
+  }
+
+  .modal-backdrop {
+    align-items: flex-end;
+  }
+
+  /* Project task meta */
+  .project-task-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .project-task-meta {
+    align-self: flex-end;
+  }
+
+  /* Reports */
+  .report-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ─ Small mobile (≤480px) ───────────────────────────── */
+@media (max-width: 480px) {
+
+  .dashboard-stats-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .projects-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .teams-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal-owners-grid {
+    gap: 0.35rem;
+  }
+
+  .task-card__actions {
+    flex-wrap: wrap;
+  }
+
+  .project-stats-row {
+    flex-direction: column;
+  }
 }

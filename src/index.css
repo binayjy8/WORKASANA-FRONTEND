@@ -1,32 +1,35 @@
-:root {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #111827;
-  background: #f5f7fb;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+/* ═══════════════════════════════════════════════════════
+   WORKASANA — Master Stylesheet
+   ═══════════════════════════════════════════════════════ */
 
-* {
-  box-sizing: border-box;
-}
+/* 1. Design tokens  */
+@import './styles/variable.css';
 
-html,
-body,
-#root {
-  min-width: 320px;
-  min-height: 100vh;
-  margin: 0;
-}
+/* 2. Reset & base */
+@import './styles/reset.css';
 
-body {
-  overflow-x: hidden;
-}
+/* 3. Layout shell */
+@import './styles/layout.css';
 
-h1,
-h2,
-h3,
-p {
-  margin-top: 0;
-}
+/* 4. Auth pages */
+@import './styles/auth.css';
+
+/* 5. Shared components */
+@import './styles/cards.css';
+@import './styles/forms.css';
+@import './styles/modal.css';
+
+/* 6. Navigation */
+@import './styles/sidebar.css';
+@import './styles/navbar.css';
+
+/* 7. Pages */
+@import './styles/dashboard.css';
+@import './styles/projects.css';
+@import './styles/tasks.css';
+@import './styles/teams.css';
+@import './styles/reports.css';
+@import './styles/settings.css';
+
+/* 8. Responsive */
+@import './styles/responsive.css';

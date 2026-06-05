@@ -1,45 +1,33 @@
 import api from './api'
 
-export const loginUser = async (userdata) => {
-  const response = await api.post(
-    '/auth/login',
-    userdata
-  )
 
-  return response.data?.data || response.data
+export const loginUser = async (credentials) => {
+  const response = await api.post('/auth/login', credentials)
+  return response.data
 }
 
-export const signupUser = async (userdata) => {
+export const signupUser = async (userData) => {
+  const response = await api.post('/auth/register', userData) 
+  return response.data
+}
+
+
+export const getMe = async () => {
   try {
-    const response = await api.post(
-      '/auth/signup',
-      userdata
-    )
-
-    return response.data?.data || response.data
-  } catch (error) {
-    if (error.response?.status !== 404) {
-      throw error
-    }
-
-    const response = await api.post(
-      '/auth/register',
-      userdata
-    )
-
-    return response.data?.data || response.data
+    const response = await api.get('/auth/me')
+    return response.data?.user || response.data?.data || response.data
+  } catch {
+    // Backend doesn't have /auth/me — return null silently
+    return null
   }
 }
 
-export const getCurrentuser = async (token) => {
-  const response = await api.get(
-    '/auth/me',
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
-  )
+// Profile update — not in backend, returns null gracefully
+export const updateProfile = async () => {
+  return null
+}
 
-  return response.data?.data || response.data
+// Password change — not in backend, returns null gracefully
+export const changePassword = async () => {
+  return null
 }

@@ -1,9 +1,57 @@
-.dashboard-card {
-  background: var(--surface);
+/* ── Empty State ────────────────────────────────────── */
 
-  border: 1px solid var(--border);
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  gap: 0.5rem;
+}
 
-  border-radius: var(--radius-lg);
+.empty-state__icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.5;
+}
 
-  box-shadow: var(--shadow-sm);
+.empty-state__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text, #374151);
+}
+
+.empty-state__description {
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #9ca3af);
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+/* Inline empty (column boards etc) */
+.empty-column {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  border: 1.5px dashed var(--color-border, #e5e7eb);
+  border-radius: 8px;
+}
+
+.empty-column strong {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #6b7280);
+  margin-bottom: 0.25rem;
+}
+
+.empty-column p {
+  font-size: 0.78rem;
+  color: var(--color-text-muted, #9ca3af);
+}
+
+.empty-message {
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #9ca3af);
+  padding: 0.75rem 0;
+  text-align: center;
 }
