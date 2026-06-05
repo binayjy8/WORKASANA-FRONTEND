@@ -19,6 +19,9 @@ const App = () => {
     <BrowserRouter>
       <Routes>
 
+       
+        <Route path="/" element={<Navigate to="/login" replace />} />
+
         {/* Public */}
         <Route path="/login"  element={<Login />}  />
         <Route path="/signup" element={<Signup />} />
@@ -56,8 +59,8 @@ const App = () => {
           <ProtectedRoute><MainLayout><Settings /></MainLayout></ProtectedRoute>
         } />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        
+        <Route path="*" element={<Navigate to="/login" replace />} />
 
       </Routes>
     </BrowserRouter>
@@ -65,3 +68,4 @@ const App = () => {
 }
 
 export default App
+
