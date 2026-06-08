@@ -32,12 +32,17 @@ const Dashboard = () => {
   const navigate                          = useNavigate()
   const { projects, tasks, isLoading, addTask } = useWorkspaceData()
   const [filter, setFilter]               = useState('All')
+  const [searchQuery, setSearchQuery]     = useState('')
   const [newTaskName, setNewTaskName]     = useState('')
   const [adding, setAdding]               = useState(false)
 
-  const filteredTasks = filter === 'All'
-    ? tasks
-    : tasks.filter((t) => t.status === filter)
+  const filteredTasks = tasks
+    .filter((t) => filter === 'All' || t.status === filter)
+    .filter((t) => {
+      const q = searchQuery.trim().toLowerCase()
+      if (!q) return true
+      return (t.title || t.name || '').toLowerCase().includes(q)
+    })
 
   const taskCountForProject = (project) =>
     tasks.filter((t) => {
@@ -114,6 +119,13 @@ const Dashboard = () => {
       <div className="dash__tasks-header">
         <p className="dash__section-title" style={{ margin: 0 }}>My Tasks</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <input
+            type="text"
+            className="dash__search-input"
+            placeholder="Search tasks…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
           <div className="dash__filters">
             {STATUS_FILTERS.map((f) => (
               <button
@@ -186,3 +198,4 @@ const Dashboard = () => {
 }
 
 export default Dashboard
+
