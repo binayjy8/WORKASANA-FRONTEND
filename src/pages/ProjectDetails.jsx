@@ -19,6 +19,9 @@ const statusDotClass = (status) => {
   return 'pd__dot--todo'
 }
 
+const getAssigneeName = (assignee) =>
+  assignee?.name || assignee?.username || (typeof assignee === 'string' ? assignee : null)
+
 const initials = (name) =>
   String(name || '?').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 
@@ -44,15 +47,20 @@ const ProjectDetails = () => {
 
   const projectTasks = tasks.filter((t) => taskBelongsToProject(t, project || { _id: projectId }))
 
-  const allOwners = [...new Set(projectTasks.map((t) => t.assignee).filter(Boolean))]
-  const allTags   = [...new Set(projectTasks.flatMap((t) => getTaskTags(t)).filter(Boolean))]
+  const allOwners = [...new Set(
+    projectTasks
+      .map((t) => getAssigneeName(t.assignee))
+      .filter(Boolean)
+  )]
+  const allTags = [...new Set(projectTasks.flatMap((t) => getTaskTags(t)).filter(Boolean))]
 
   let filtered = projectTasks
 
   if (ownerFilter) {
-    filtered = filtered.filter((t) =>
-      String(t.assignee || '').toLowerCase().includes(ownerFilter.toLowerCase())
-    )
+    filtered = filtered.filter((t) => {
+      const name = getAssigneeName(t.assignee) || ''
+      return name.toLowerCase().includes(ownerFilter.toLowerCase())
+    })
   }
 
   if (tagFilter) {
@@ -187,8 +195,8 @@ const ProjectDetails = () => {
                 <span className="pd__task-due">{task.dueDate}</span>
               )}
               {task.assignee && (
-                <span className="pd__task-avatar" title={task.assignee}>
-                  {initials(task.assignee)}
+                <span className="pd__task-avatar" title={getAssigneeName(task.assignee)}>
+                  {initials(getAssigneeName(task.assignee))}
                 </span>
               )}
               {getTaskTags(task).slice(0, 2).map((tag) => (
