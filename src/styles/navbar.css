@@ -20,6 +20,14 @@
   border-radius: var(--radius-sm);
 }
 
+@media (max-width: 768px) {
+  .navbar__hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
 .navbar__hamburger:hover {
   background: var(--color-bg);
   color: var(--color-text-primary);
