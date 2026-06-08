@@ -1,47 +1,27 @@
 import { useEffect, useRef } from 'react'
-import { useWorkspaceData } from '../hooks/useWorkspaceData'
-import { getTaskProjectName, getTaskTeamName, toDisplayStatus } from '../utils/taskUtils'
-
-// FIX 1: import and register EVERYTHING from chart.js
+import { useNavigate } from 'react-router-dom'
+import { FaArrowLeft } from 'react-icons/fa6'
 import { Chart, registerables } from 'chart.js'
+import { useWorkspaceData } from '../hooks/useWorkspaceData'
+import { toDisplayStatus, getTaskProjectName, getTaskTeamName } from '../utils/taskUtils'
+
 Chart.register(...registerables)
 
-const COLORS = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#ec4899']
-
-// FIX 2: bulletproof ChartCanvas — always destroys before recreating
 const ChartCanvas = ({ type, data, options }) => {
   const canvasRef = useRef(null)
   const chartRef  = useRef(null)
 
   useEffect(() => {
     if (!canvasRef.current) return
-
-    // Always destroy existing chart first (fixes StrictMode double-invoke)
-    if (chartRef.current) {
-      chartRef.current.destroy()
-      chartRef.current = null
-    }
-
-    // Small timeout so canvas is fully unmounted before re-creating
+    if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null }
     const timer = setTimeout(() => {
       if (!canvasRef.current) return
-      try {
-        chartRef.current = new Chart(canvasRef.current, {
-          type,
-          data,
-          options,
-        })
-      } catch (e) {
-        console.error('Chart error:', e)
-      }
+      try { chartRef.current = new Chart(canvasRef.current, { type, data, options }) }
+      catch (e) { console.error(e) }
     }, 0)
-
     return () => {
       clearTimeout(timer)
-      if (chartRef.current) {
-        chartRef.current.destroy()
-        chartRef.current = null
-      }
+      if (chartRef.current) { chartRef.current.destroy(); chartRef.current = null }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(data)])
@@ -49,229 +29,153 @@ const ChartCanvas = ({ type, data, options }) => {
   return <canvas ref={canvasRef} />
 }
 
-const barOptions = (title) => ({
-  responsive: true,
-  maintainAspectRatio: true,
-  plugins: {
-    legend: { display: false },
-    title: {
-      display: true,
-      text: title,
-      font: { size: 13, weight: '600' },
-      padding: { bottom: 12 },
-    },
-  },
-  scales: {
-    y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0 } },
-  },
-})
+const COLORS = ['#534ab7','#10b981','#f59e0b','#ef4444','#8b5cf6','#3b82f6','#ec4899','#14b8a6']
 
-const pieOptions = {
+const barOpts = {
   responsive: true,
-  maintainAspectRatio: true,
-  plugins: {
-    legend: {
-      position: 'bottom',
-      labels: { padding: 16, font: { size: 12 } },
-    },
-    title: {
-      display: true,
-      text: 'Task Status Breakdown',
-      font: { size: 13, weight: '600' },
-      padding: { bottom: 12 },
-    },
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#888' } },
+    y: { beginAtZero: true, ticks: { stepSize: 1, precision: 0, font: { size: 11 }, color: '#888' }, grid: { color: 'rgba(0,0,0,0.05)' } },
   },
+  elements: { bar: { borderRadius: 5 } },
 }
 
 const Reports = () => {
-  const { filteredTasks, isLoading, error } = useWorkspaceData()
-  const tasks = filteredTasks
+  const navigate = useNavigate()
+  const { tasks, isLoading } = useWorkspaceData()
 
-  // ── Stats ─────────────────────────────────────────────
-  const totalTasks      = tasks.length
-  const completedTasks  = tasks.filter((t) => toDisplayStatus(t.status) === 'Completed').length
-  const inProgressTasks = tasks.filter((t) => toDisplayStatus(t.status) === 'In Progress').length
-  const toDoTasks       = tasks.filter((t) => toDisplayStatus(t.status) === 'To Do').length
-  const blockedTasks    = tasks.filter((t) => toDisplayStatus(t.status) === 'Blocked').length
-  const completionRate  = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+  const completed  = tasks.filter((t) => toDisplayStatus(t.status) === 'Completed')
+  const pending    = tasks.filter((t) => toDisplayStatus(t.status) !== 'Completed')
+  const inProgress = tasks.filter((t) => toDisplayStatus(t.status) === 'In Progress')
+  const blocked    = tasks.filter((t) => toDisplayStatus(t.status) === 'Blocked')
+  const total      = tasks.length
+  const rate       = total > 0 ? Math.round((completed.length / total) * 100) : 0
+  const pendingDays = pending.reduce((s, t) => s + (Number(t.timeToComplete) || 0), 0)
 
-  const pendingDays = tasks
-    .filter((t) => toDisplayStatus(t.status) !== 'Completed')
-    .reduce((sum, t) => sum + (Number(t.timeToComplete) || 0), 0)
-
-  const oneWeekAgo = new Date()
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
-  const lastWeekCompleted = tasks.filter((t) => {
-    if (toDisplayStatus(t.status) !== 'Completed') return false
-    const updated = t.updatedAt ? new Date(t.updatedAt) : null
-    return updated && updated >= oneWeekAgo
-  }).length
-
-  // ── Aggregations ──────────────────────────────────────
   const teamCounts = {}
-  tasks
-    .filter((t) => toDisplayStatus(t.status) === 'Completed')
-    .forEach((t) => {
-      const team = getTaskTeamName(t) || 'Unknown'
-      teamCounts[team] = (teamCounts[team] || 0) + 1
-    })
+  completed.forEach((t) => {
+    const name = getTaskTeamName(t) || 'Unknown'
+    teamCounts[name] = (teamCounts[name] || 0) + 1
+  })
 
   const ownerCounts = {}
-  tasks
-    .filter((t) => toDisplayStatus(t.status) === 'Completed')
-    .forEach((t) => {
-      const owner = t.assignee || 'Unassigned'
-      ownerCounts[owner] = (ownerCounts[owner] || 0) + 1
-    })
+  completed.forEach((t) => {
+    const name = t.assignee || 'Unassigned'
+    ownerCounts[name] = (ownerCounts[name] || 0) + 1
+  })
 
-  const projectCounts = {}
-  tasks
-    .filter((t) => toDisplayStatus(t.status) === 'Completed')
-    .forEach((t) => {
-      const proj = getTaskProjectName(t) || 'Unknown'
-      projectCounts[proj] = (projectCounts[proj] || 0) + 1
-    })
+  const pendingTasks = pending.slice(0, 8)
 
-  const pendingTasks = tasks
-    .filter((t) => toDisplayStatus(t.status) !== 'Completed')
-    .slice(0, 8)
-
-  // ── Chart data ────────────────────────────────────────
-  const statusChartData = {
-    labels: ['Completed', 'In Progress', 'To Do', 'Blocked'],
-    datasets: [{
-      data: [completedTasks, inProgressTasks, toDoTasks, blockedTasks],
-      backgroundColor: ['#10b981', '#6366f1', '#f59e0b', '#ef4444'],
-      borderWidth: 2,
-      borderColor: '#fff',
-    }],
+  const workDoneData = {
+    labels: Object.keys(teamCounts).length ? Object.keys(teamCounts) : ['No data'],
+    datasets: [{ data: Object.keys(teamCounts).length ? Object.values(teamCounts) : [0],
+      backgroundColor: COLORS, borderRadius: 5 }],
   }
 
-  const teamChartData = {
-    labels: Object.keys(teamCounts).length ? Object.keys(teamCounts) : ['No Data'],
-    datasets: [{
-      label: 'Tasks Closed',
-      data: Object.keys(teamCounts).length ? Object.values(teamCounts) : [0],
-      backgroundColor: COLORS,
-      borderRadius: 6,
-    }],
+  const pendingData = {
+    labels: pendingTasks.length ? pendingTasks.map((t) => (t.title || t.name || 'Task').slice(0, 20)) : ['No data'],
+    datasets: [{ data: pendingTasks.length ? pendingTasks.map((t) => Number(t.timeToComplete) || 0) : [0],
+      backgroundColor: '#f59e0b', borderRadius: 5 }],
   }
 
-  const ownerChartData = {
-    labels: Object.keys(ownerCounts).length ? Object.keys(ownerCounts) : ['No Data'],
-    datasets: [{
-      label: 'Tasks Closed',
-      data: Object.keys(ownerCounts).length ? Object.values(ownerCounts) : [0],
-      backgroundColor: '#8b5cf6',
-      borderRadius: 6,
-    }],
+  const teamData = {
+    labels: Object.keys(teamCounts).length ? Object.keys(teamCounts) : ['No data'],
+    datasets: [{ data: Object.keys(teamCounts).length ? Object.values(teamCounts) : [0],
+      backgroundColor: COLORS, borderRadius: 5 }],
   }
 
-  const projectChartData = {
-    labels: Object.keys(projectCounts).length ? Object.keys(projectCounts) : ['No Data'],
-    datasets: [{
-      label: 'Tasks Closed',
-      data: Object.keys(projectCounts).length ? Object.values(projectCounts) : [0],
-      backgroundColor: '#f59e0b',
-      borderRadius: 6,
-    }],
+  const ownerData = {
+    labels: Object.keys(ownerCounts).length ? Object.keys(ownerCounts) : ['No data'],
+    datasets: [{ data: Object.keys(ownerCounts).length ? Object.values(ownerCounts) : [0],
+      backgroundColor: '#8b5cf6', borderRadius: 5 }],
   }
 
-  const pendingChartData = {
-    labels: pendingTasks.length
-      ? pendingTasks.map((t) => t.title || t.name || 'Task')
-      : ['No Data'],
-    datasets: [{
-      label: 'Days to Complete',
-      data: pendingTasks.length
-        ? pendingTasks.map((t) => Number(t.timeToComplete) || 0)
-        : [0],
-      backgroundColor: '#ef4444',
-      borderRadius: 6,
-    }],
-  }
-
-  if (isLoading) {
-    return (
-      <section className="page-section">
-        <div className="page-header">
-          <h1>Reports</h1>
-          <p>Loading reports…</p>
-        </div>
-      </section>
-    )
-  }
+  if (isLoading) return <div className="rp__empty">Loading reports…</div>
 
   return (
-    <section className="page-section">
+    <div className="rp">
 
-      {/* HEADER */}
-      <div className="page-header">
-        <h1>Reports</h1>
-        <p>{error || 'Track workspace productivity and project performance.'}</p>
+      <button type="button" className="rp__back" onClick={() => navigate('/dashboard')}>
+        <FaArrowLeft /><span>Back to Dashboard</span>
+      </button>
+
+      <div className="rp__page-header">
+        <h1 className="rp__title">Workasana Reports</h1>
+        <p className="rp__subtitle">Track workspace productivity and project performance.</p>
       </div>
 
-      {/* STATS */}
-      <div className="report-stats-grid">
-        <article className="report-stat-card">
-          <span>Completion Rate</span>
-          <strong>{completionRate}%</strong>
-          <div className="report-progress-bar">
-            <div className="report-progress-fill" style={{ width: `${completionRate}%` }} />
+      <div className="rp__overview">
+
+        <div className="rp__overview-stats">
+          <div className="rp__stat">
+            <span className="rp__stat-label">Completion Rate</span>
+            <strong className="rp__stat-value">{rate}%</strong>
+            <div className="rp__progress"><div className="rp__progress-fill" style={{ width: `${rate}%` }} /></div>
           </div>
-        </article>
-        <article className="report-stat-card">
-          <span>Total Tasks</span>
-          <strong>{totalTasks}</strong>
-        </article>
-        <article className="report-stat-card report-stat-card--green">
-          <span>Completed</span>
-          <strong>{completedTasks}</strong>
-        </article>
-        <article className="report-stat-card report-stat-card--purple">
-          <span>In Progress</span>
-          <strong>{inProgressTasks}</strong>
-        </article>
-        <article className="report-stat-card report-stat-card--yellow">
-          <span>Pending Days</span>
-          <strong>{pendingDays}</strong>
-        </article>
-        <article className="report-stat-card report-stat-card--red">
-          <span>Completed This Week</span>
-          <strong>{lastWeekCompleted}</strong>
-        </article>
+          <div className="rp__stat">
+            <span className="rp__stat-label">Total Tasks</span>
+            <strong className="rp__stat-value">{total}</strong>
+          </div>
+          <div className="rp__stat rp__stat--green">
+            <span className="rp__stat-label">Completed</span>
+            <strong className="rp__stat-value">{completed.length}</strong>
+          </div>
+          <div className="rp__stat rp__stat--purple">
+            <span className="rp__stat-label">In Progress</span>
+            <strong className="rp__stat-value">{inProgress.length}</strong>
+          </div>
+          <div className="rp__stat rp__stat--yellow">
+            <span className="rp__stat-label">Pending Days</span>
+            <strong className="rp__stat-value">{pendingDays}</strong>
+          </div>
+          <div className="rp__stat rp__stat--red">
+            <span className="rp__stat-label">Blocked</span>
+            <strong className="rp__stat-value">{blocked.length}</strong>
+          </div>
+        </div>
+
+        <div className="rp__charts">
+
+          <div className="rp__chart-section">
+            <p className="rp__chart-label">Total Work Done Last Week</p>
+            <div className="rp__chart-wrap">
+              <ChartCanvas type="bar" data={workDoneData} options={barOpts} />
+            </div>
+          </div>
+
+          <div className="rp__divider" />
+
+          <div className="rp__chart-section">
+            <p className="rp__chart-label">Total Days of Work Pending</p>
+            <div className="rp__chart-wrap">
+              <ChartCanvas type="bar" data={pendingData} options={barOpts} />
+            </div>
+          </div>
+
+          <div className="rp__divider" />
+
+          <div className="rp__chart-section">
+            <p className="rp__chart-label">Tasks Closed by Team</p>
+            <div className="rp__chart-wrap">
+              <ChartCanvas type="bar" data={teamData} options={barOpts} />
+            </div>
+          </div>
+
+          <div className="rp__divider" />
+
+          <div className="rp__chart-section">
+            <p className="rp__chart-label">Tasks Closed by Owner</p>
+            <div className="rp__chart-wrap">
+              <ChartCanvas type="bar" data={ownerData} options={barOpts} />
+            </div>
+          </div>
+
+        </div>
       </div>
 
-      {/* CHARTS ROW 1 */}
-      <div className="report-charts-grid">
-        <div className="dashboard-card report-chart-card">
-          <ChartCanvas type="pie" data={statusChartData} options={pieOptions} />
-        </div>
-        <div className="dashboard-card report-chart-card">
-          <ChartCanvas type="bar" data={teamChartData} options={barOptions('Tasks Closed by Team')} />
-        </div>
-      </div>
-
-      {/* CHARTS ROW 2 */}
-      <div className="report-charts-grid">
-        <div className="dashboard-card report-chart-card">
-          <ChartCanvas type="bar" data={ownerChartData} options={barOptions('Tasks Closed by Owner')} />
-        </div>
-        <div className="dashboard-card report-chart-card">
-          <ChartCanvas type="bar" data={projectChartData} options={barOptions('Tasks Closed by Project')} />
-        </div>
-      </div>
-
-      {/* PENDING CHART */}
-      <div className="dashboard-card report-chart-card report-chart-card--full">
-        <ChartCanvas
-          type="bar"
-          data={pendingChartData}
-          options={barOptions('Pending Work (Days per Task)')}
-        />
-      </div>
-
-    </section>
+    </div>
   )
 }
 

@@ -1,219 +1,282 @@
-import { Link, useParams, useSearchParams } from 'react-router-dom'
-import EmptyState from '../components/EmptyState'
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { FaArrowLeft, FaPlus, FaXmark } from 'react-icons/fa6'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
-import { getEntityId, isSameEntityId } from '../utils/entity'
 import {
-  filterTasksByParams,
+  getTaskProjectName,
+  getTaskTeamName,
   getTaskTags,
-  sortTasks,
   taskBelongsToProject,
-  toDisplayStatus,
+  sortTasks,
+  taskStatusOptions,
 } from '../utils/taskUtils'
+import { createTask } from '../services/taskApi'
 
-const statusPillClass = (status) => {
-  switch (status) {
-    case 'Completed':   return 'task-pill-completed'
-    case 'In Progress': return 'task-pill-progress'
-    case 'Blocked':     return 'task-pill-blocked'
-    default:            return 'task-pill-pending'
-  }
+const statusDotClass = (status) => {
+  if (status === 'In Progress') return 'pd__dot--inprogress'
+  if (status === 'Completed')   return 'pd__dot--completed'
+  if (status === 'Blocked')     return 'pd__dot--blocked'
+  return 'pd__dot--todo'
 }
 
-const ProjectDetails = () => {
-  const { projectId } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { projects, tasks, isLoading, error } = useWorkspaceData()
+const initials = (name) =>
+  String(name || '?').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
 
-  const project = projects.find((item) =>
-    isSameEntityId(getEntityId(item), projectId),
+const ProjectDetails = () => {
+  const { projectId }                       = useParams()
+  const navigate                            = useNavigate()
+  const { projects, tasks, teams, addTask, isLoading } = useWorkspaceData()
+
+  const [ownerFilter, setOwnerFilter]   = useState('')
+  const [tagFilter, setTagFilter]       = useState('')
+  const [sortBy, setSortBy]             = useState('')
+  const [showAddForm, setShowAddForm]   = useState(false)
+  const [newTaskName, setNewTaskName]   = useState('')
+  const [newTaskStatus, setNewTaskStatus] = useState('To Do')
+  const [newTaskPriority, setNewTaskPriority] = useState('Medium')
+  const [newTaskDue, setNewTaskDue]     = useState('')
+  const [newTaskAssignee, setNewTaskAssignee] = useState('')
+  const [adding, setAdding]             = useState(false)
+
+  const project = projects.find(
+    (p) => String(p._id) === String(projectId)
   )
 
-  const projectTasks = project
-    ? sortTasks(
-        filterTasksByParams(
-          tasks.filter((task) => taskBelongsToProject(task, project)),
-          searchParams,
-        ),
-        searchParams.get('sort'),
-      )
-    : []
+  const projectTasks = tasks.filter((t) => taskBelongsToProject(t, project || { _id: projectId }))
 
-  const allTags = [
-    ...new Set(
-      tasks
-        .filter((task) => (project ? taskBelongsToProject(task, project) : false))
-        .flatMap(getTaskTags),
-    ),
-  ]
+  const allOwners = [...new Set(projectTasks.map((t) => t.assignee).filter(Boolean))]
+  const allTags   = [...new Set(projectTasks.flatMap((t) => getTaskTags(t)).filter(Boolean))]
 
-  const updateFilter = (key, value) => {
-    const next = new URLSearchParams(searchParams)
-    value ? next.set(key, value) : next.delete(key)
-    setSearchParams(next)
-  }
+  let filtered = projectTasks
 
-  const clearFilters = () => setSearchParams({})
-  const hasFilters = searchParams.toString() !== ''
-
-  // ── Loading / not found ──────────────────────────────
-  if (!project && isLoading) {
-    return (
-      <section className="page-section">
-        <div className="page-header">
-          <h1>Loading Project…</h1>
-          <p>Fetching project details…</p>
-        </div>
-      </section>
+  if (ownerFilter) {
+    filtered = filtered.filter((t) =>
+      String(t.assignee || '').toLowerCase().includes(ownerFilter.toLowerCase())
     )
   }
 
-  if (!project) {
-    return (
-      <section className="page-section">
-        <div className="page-header">
-          <h1>Project not found</h1>
-          <p>This project does not exist or has been removed.</p>
-        </div>
-        <Link to="/projects" className="project-add-btn">← Back to Projects</Link>
-      </section>
+  if (tagFilter) {
+    filtered = filtered.filter((t) =>
+      getTaskTags(t).some((tag) => tag.toLowerCase().includes(tagFilter.toLowerCase()))
     )
   }
 
-  // ── Stats ────────────────────────────────────────────
-  const completedCount = projectTasks.filter(
-    (t) => toDisplayStatus(t.status) === 'Completed',
-  ).length
+  if (sortBy) filtered = sortTasks(filtered, sortBy)
+
+  const handleAddTask = async () => {
+    const name = newTaskName.trim()
+    if (!name || !project) return
+    setAdding(true)
+    try {
+      const teamId = project.team?.[0]?._id || project.team?.[0] || teams[0]?._id
+      const task = await createTask({
+        name,
+        project: project._id,
+        team: teamId,
+        status: newTaskStatus,
+        priority: newTaskPriority,
+        dueDate: newTaskDue,
+        deadline: newTaskDue,
+        assignee: newTaskAssignee,
+        timeToComplete: 1,
+      })
+      addTask(task)
+      setNewTaskName('')
+      setNewTaskStatus('To Do')
+      setNewTaskPriority('Medium')
+      setNewTaskDue('')
+      setNewTaskAssignee('')
+      setShowAddForm(false)
+    } catch (e) {
+      console.error('Failed to create task:', e)
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  if (isLoading) {
+    return <div className="pd__empty">Loading project…</div>
+  }
 
   return (
-    <section className="page-section">
+    <div className="pd">
 
-      {/* HEADER */}
-      <div className="project-header">
-        <div>
-          <span className="project-label">PROJECT</span>
-          <h1>{project.title}</h1>
-          <p>
-            {error || project.description || 'Manage project tasks and workflow.'}
-          </p>
-        </div>
-        <Link to="/tasks" className="project-add-btn">+ Add Task</Link>
-      </div>
-
-      {/* STATS */}
-      <div className="project-stats-row">
-        <div className="project-stat">
-          <strong>{projectTasks.length}</strong>
-          <span>Total Tasks</span>
-        </div>
-        <div className="project-stat project-stat--completed">
-          <strong>{completedCount}</strong>
-          <span>Completed</span>
-        </div>
-        <div className="project-stat project-stat--pending">
-          <strong>{projectTasks.length - completedCount}</strong>
-          <span>Remaining</span>
-        </div>
-        {project.team?.length > 0 && (
-          <div className="project-stat">
-            <strong>{project.team.length}</strong>
-            <span>Team Members</span>
-          </div>
-        )}
-      </div>
-
-      {/* FILTERS */}
-      <div className="dashboard-card">
-        <div className="project-toolbar">
-          <div className="project-toolbar-group">
-
-            <select
-              value={searchParams.get('owner') || ''}
-              onChange={(e) => updateFilter('owner', e.target.value)}
-            >
-              <option value="">Filter by Owner</option>
-              {project.team?.map((member) => (
-                <option key={member} value={member}>{member}</option>
-              ))}
-            </select>
-
-            <select
-              value={searchParams.get('tags') || ''}
-              onChange={(e) => updateFilter('tags', e.target.value)}
-            >
-              <option value="">Filter by Tag</option>
-              {allTags.map((tag) => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
-
-          </div>
-
-          <div className="project-toolbar-group">
-            <button
-              type="button"
-              className={`toolbar-sort-btn ${searchParams.get('sort') === 'dueDate' ? 'toolbar-sort-btn--active' : ''}`}
-              onClick={() => updateFilter('sort', searchParams.get('sort') === 'dueDate' ? '' : 'dueDate')}
-            >
-              Due Date
-            </button>
-            <button
-              type="button"
-              className={`toolbar-sort-btn ${searchParams.get('sort') === 'priority' ? 'toolbar-sort-btn--active' : ''}`}
-              onClick={() => updateFilter('sort', searchParams.get('sort') === 'priority' ? '' : 'priority')}
-            >
-              Priority
-            </button>
-            {hasFilters && (
-              <button type="button" className="toolbar-clear-btn" onClick={clearFilters}>
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* TASK LIST */}
-      <div className="dashboard-card">
-        <div className="project-task-header">
-          <h2>Task List</h2>
-          <span className="project-task-count">{projectTasks.length} Tasks</span>
-        </div>
-
-        <div className="project-task-list">
-          {projectTasks.length > 0 ? (
-            projectTasks.map((task) => {
-              const status = toDisplayStatus(task.status)
-              return (
-                <Link
-                  key={getEntityId(task)}
-                  to={`/tasks/${getEntityId(task)}`}
-                  className="project-task-row"
-                >
-                  <div className="project-task-info">
-                    <strong>{task.title || task.name || 'Untitled Task'}</strong>
-                    <p>{task.assignee || 'Unassigned'}</p>
-                  </div>
-
-                  <div className="project-task-meta">
-                    <span className={`task-pill ${statusPillClass(status)}`}>
-                      {status}
-                    </span>
-                    <small>{task.dueDate || 'No due date'}</small>
-                  </div>
-                </Link>
-              )
-            })
-          ) : (
-            <EmptyState
-              icon="📋"
-              title="No tasks yet"
-              description="Tasks for this project will appear here. Add a task to get started."
-            />
+      <div className="pd__header">
+        <button type="button" className="pd__back" onClick={() => navigate('/dashboard')}>
+          <FaArrowLeft />
+          <span>Back to Dashboard</span>
+        </button>
+        <div className="pd__header-info">
+          <h1 className="pd__title">{project?.title || project?.name || 'Project'}</h1>
+          {project?.description && (
+            <p className="pd__desc">{project.description}</p>
           )}
         </div>
       </div>
 
-    </section>
+      <div className="pd__toolbar">
+        <div className="pd__filters">
+          <select
+            className="pd__select"
+            value={ownerFilter}
+            onChange={(e) => setOwnerFilter(e.target.value)}
+          >
+            <option value="">By Owner</option>
+            {allOwners.map((o) => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+          </select>
+
+          <select
+            className="pd__select"
+            value={tagFilter}
+            onChange={(e) => setTagFilter(e.target.value)}
+          >
+            <option value="">By Tag</option>
+            {allTags.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+
+          {(ownerFilter || tagFilter) && (
+            <button
+              type="button"
+              className="pd__clear-btn"
+              onClick={() => { setOwnerFilter(''); setTagFilter('') }}
+            >
+              <FaXmark /> Clear
+            </button>
+          )}
+        </div>
+
+        <div className="pd__sorts">
+          <span className="pd__sort-label">Sort by:</span>
+          <button
+            type="button"
+            className={`pd__sort-btn ${sortBy === 'dueDate' ? 'pd__sort-btn--active' : ''}`}
+            onClick={() => setSortBy(sortBy === 'dueDate' ? '' : 'dueDate')}
+          >
+            Due Date
+          </button>
+          <button
+            type="button"
+            className={`pd__sort-btn ${sortBy === 'priority' ? 'pd__sort-btn--active' : ''}`}
+            onClick={() => setSortBy(sortBy === 'priority' ? '' : 'priority')}
+          >
+            Priority
+          </button>
+        </div>
+      </div>
+
+      <div className="pd__task-list">
+        {filtered.length === 0 && !showAddForm && (
+          <div className="pd__empty">No tasks found for this project.</div>
+        )}
+
+        {filtered.map((task) => (
+          <div
+            key={task._id}
+            className="pd__task-row"
+            onClick={() => navigate(`/tasks/${task._id}`)}
+          >
+            <span className={`pd__dot ${statusDotClass(task.status)}`} />
+            <span className="pd__task-name">{task.title || task.name}</span>
+
+            <div className="pd__task-meta">
+              {task.dueDate && (
+                <span className="pd__task-due">{task.dueDate}</span>
+              )}
+              {task.assignee && (
+                <span className="pd__task-avatar" title={task.assignee}>
+                  {initials(task.assignee)}
+                </span>
+              )}
+              {getTaskTags(task).slice(0, 2).map((tag) => (
+                <span key={tag} className="pd__tag">{tag}</span>
+              ))}
+              <span className={`pd__priority pd__priority--${(task.priority || 'medium').toLowerCase()}`}>
+                {task.priority || 'Medium'}
+              </span>
+              <span className="pd__status">{task.status}</span>
+            </div>
+          </div>
+        ))}
+
+        {showAddForm && (
+          <div className="pd__add-form">
+            <input
+              className="pd__add-input pd__add-input--name"
+              type="text"
+              placeholder="Task name…"
+              value={newTaskName}
+              onChange={(e) => setNewTaskName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
+              autoFocus
+            />
+            <div className="pd__add-row">
+              <select
+                className="pd__add-input"
+                value={newTaskStatus}
+                onChange={(e) => setNewTaskStatus(e.target.value)}
+              >
+                {taskStatusOptions.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <select
+                className="pd__add-input"
+                value={newTaskPriority}
+                onChange={(e) => setNewTaskPriority(e.target.value)}
+              >
+                {['High', 'Medium', 'Low'].map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <input
+                className="pd__add-input"
+                type="date"
+                value={newTaskDue}
+                onChange={(e) => setNewTaskDue(e.target.value)}
+              />
+              <input
+                className="pd__add-input"
+                type="text"
+                placeholder="Assignee"
+                value={newTaskAssignee}
+                onChange={(e) => setNewTaskAssignee(e.target.value)}
+              />
+              <button
+                type="button"
+                className="pd__add-submit"
+                onClick={handleAddTask}
+                disabled={adding || !newTaskName.trim()}
+              >
+                {adding ? 'Adding…' : 'Add'}
+              </button>
+              <button
+                type="button"
+                className="pd__add-cancel"
+                onClick={() => { setShowAddForm(false); setNewTaskName('') }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="pd__add-btn-row">
+          <button
+            type="button"
+            className="pd__add-task-btn"
+            onClick={() => setShowAddForm(true)}
+          >
+            <FaPlus />
+            <span>Add New Task</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
   )
 }
 

@@ -5,23 +5,17 @@ const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
   'https://workasana-backend-iota.vercel.app/api'
 
-const api = axios.create({
-  baseURL: API_BASE_URL,
-})
+const api = axios.create({ baseURL: API_BASE_URL })
 
-// AUTO TOKEN
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`
     return config
   },
   (error) => Promise.reject(error),
 )
 
-// AUTO LOGOUT on 401
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -33,14 +27,19 @@ api.interceptors.response.use(
   },
 )
 
-// ── HELPERS ───────────────────────────────────────────────
-
 const getCollection = (data, key) => {
-  if (Array.isArray(data))             return data
-  if (Array.isArray(data?.[key]))      return data[key]
-  if (Array.isArray(data?.data))       return data.data
-  if (Array.isArray(data?.data?.[key]))return data.data[key]
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.[key])) return data[key]
+  if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.data?.[key])) return data.data[key]
   return []
+}
+
+const getItem = (data, key) => {
+  if (data?.[key]) return data[key]
+  if (data?.data?.[key]) return data.data[key]
+  if (data?.data) return data.data
+  return data
 }
 
 const getText = (value, fallback = '') => {
@@ -49,40 +48,75 @@ const getText = (value, fallback = '') => {
   return value.name || value.title || value.email || value.description || fallback
 }
 
-// ── NORMALIZERS ───────────────────────────────────────────
+const normalizeTags = (tags) => {
+  if (Array.isArray(tags)) {
+    return tags
+      .map((tag) => String(tag).trim())
+      .filter(Boolean)
+  }
 
-const normalizeProject = (project) => ({
+  return String(tags || '')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+const getTaskDate = (task) => {
+  return (
+    task?.dueDate ||
+    task?.deadline ||
+    task?.due_date ||
+    task?.due ||
+    task?.completionDate ||
+    ''
+  )
+}
+
+const shouldTryFallbackMethod = (error) => {
+  const status = error.response?.status
+  return status === 404 || status === 405
+}
+
+const normalizeProject = (project = {}) => ({
   ...project,
-  title:    getText(project.title || project.name),
-  status:   project.status   || 'Pending',
+  title: getText(project.title || project.name),
+  name: getText(project.name || project.title),
+  status: project.status || 'Pending',
   priority: project.priority || 'Medium',
   deadline: project.deadline || project.dueDate || '',
-  team:     Array.isArray(project.team) ? project.team : [],
+  team: Array.isArray(project.team) ? project.team : [],
 })
 
-const normalizeTask = (task) => ({
+const normalizeTask = (task = {}) => ({
   ...task,
-  title:    getText(task.title || task.name),
-  status:   toDisplayStatus(task.status),
+  title: getText(task.title || task.name),
+  name: getText(task.name || task.title),
+  status: toDisplayStatus(task.status),
   priority: task.priority || 'Medium',
+  project: task.project,
+  team: task.team,
+  owners: Array.isArray(task.owners) ? task.owners : [],
+  tags: normalizeTags(task.tags),
+  dueDate: getTaskDate(task),
+  deadline: task.deadline || getTaskDate(task),
+  assignee: task.assignee || '',
+  timeToComplete: task.timeToComplete ?? 0,
 })
 
-const normalizeTeam = (team) => ({
+const normalizeTeam = (team = {}) => ({
   ...team,
   name: getText(team.name || team.title),
+  title: getText(team.title || team.name),
+  description: getText(team.description, ''),
 })
 
-const normalizeUser = (user) => ({
+const normalizeUser = (user = {}) => ({
   ...user,
-  name: getText(
-    user.name || user.fullName || user.username || user.email,
-  ),
-  email:    user.email    || user.username || '',
-  role:     user.role     || user.bio || user.companyName || 'Team Member',
+  name: getText(user.name || user.fullName || user.username || user.email),
+  email: user.email || user.username || '',
+  role: user.role || user.bio || user.companyName || 'Team Member',
   projects: user.projects || 0,
 })
-
-// ── PROJECTS ──────────────────────────────────────────────
 
 export const getProjects = async () => {
   const response = await api.get('/projects')
@@ -91,40 +125,42 @@ export const getProjects = async () => {
 
 export const createProject = async (projectData) => {
   const response = await api.post('/projects', projectData)
-  return normalizeProject(
-    response.data?.project || response.data?.data || response.data,
-  )
+  return normalizeProject(getItem(response.data, 'project'))
 }
-
-// ── TASKS ─────────────────────────────────────────────────
 
 export const getTasks = async () => {
   const response = await api.get('/tasks')
   return getCollection(response.data, 'tasks').map(normalizeTask)
 }
 
-// ── TEAMS ─────────────────────────────────────────────────
-
 export const getTeams = async () => {
-  try {
-    const response = await api.get('/teams')
-    return getCollection(response.data, 'teams').map(normalizeTeam)
-  } catch {
-    // fallback to users if /teams endpoint doesn't exist
-    const response = await api.get('/users')
-    return getCollection(response.data, 'users').map(normalizeTeam)
-  }
+  const response = await api.get('/teams')
+  return getCollection(response.data, 'teams').map(normalizeTeam)
 }
 
-// FIX: createTeam was missing — added now
 export const createTeam = async (teamData) => {
   const response = await api.post('/teams', teamData)
-  return normalizeTeam(
-    response.data?.team || response.data?.data || response.data,
-  )
+  return normalizeTeam(getItem(response.data, 'team'))
 }
 
-// ── USERS ─────────────────────────────────────────────────
+export const updateTeam = async (teamId, teamData) => {
+  try {
+    const response = await api.put(`/teams/${teamId}`, teamData)
+    return normalizeTeam(getItem(response.data, 'team'))
+  } catch (putError) {
+    if (!shouldTryFallbackMethod(putError)) throw putError
+
+    try {
+      const response = await api.patch(`/teams/${teamId}`, teamData)
+      return normalizeTeam(getItem(response.data, 'team'))
+    } catch (patchError) {
+      if (!shouldTryFallbackMethod(patchError)) throw patchError
+
+      const response = await api.post(`/teams/${teamId}`, teamData)
+      return normalizeTeam(getItem(response.data, 'team'))
+    }
+  }
+}
 
 export const getUsers = async () => {
   const response = await api.get('/users')

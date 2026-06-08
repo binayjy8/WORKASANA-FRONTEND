@@ -1,193 +1,187 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { FaPlus } from 'react-icons/fa6'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
-import { getEntityId } from '../utils/entity'
-import { toDisplayStatus } from '../utils/taskUtils'
+import { getTaskProjectName, getTaskTeamName } from '../utils/taskUtils'
+import { createTask } from '../services/taskApi'
 
 const STATUS_FILTERS = ['All', 'In Progress', 'Completed', 'To Do', 'Blocked']
 
+const statusDotClass = (status) => {
+  if (status === 'In Progress') return 'dash__task-status-dot--inprogress'
+  if (status === 'Completed')   return 'dash__task-status-dot--completed'
+  if (status === 'Blocked')     return 'dash__task-status-dot--blocked'
+  return 'dash__task-status-dot--todo'
+}
+
+const projectBadgeClass = (status) => {
+  if (!status || status === 'Pending') return 'dash__badge--pending'
+  if (status === 'Completed')          return 'dash__badge--completed'
+  return 'dash__badge--active'
+}
+
+const initials = (name) =>
+  String(name || '?')
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+
 const Dashboard = () => {
-  const {
-    projects,
-    tasks,
-    filteredProjects,
-    filteredTasks,
-    searchQuery,
-    isLoading,
-    error,
-  } = useWorkspaceData()
+  const navigate                          = useNavigate()
+  const { projects, tasks, isLoading, addTask } = useWorkspaceData()
+  const [filter, setFilter]               = useState('All')
+  const [newTaskName, setNewTaskName]     = useState('')
+  const [adding, setAdding]               = useState(false)
 
-  const [activeFilter, setActiveFilter] = useState('All')
+  const filteredTasks = filter === 'All'
+    ? tasks
+    : tasks.filter((t) => t.status === filter)
 
-  const visibleProjects = searchQuery ? filteredProjects : projects
-  const visibleTasks = searchQuery ? filteredTasks : tasks
+  const taskCountForProject = (project) =>
+    tasks.filter((t) => {
+      const name = getTaskProjectName(t)
+      return name === (project.title || project.name)
+    }).length
 
-  const previewProjects = visibleProjects.slice(0, 3)
+  const handleAddTask = async () => {
+    const name = newTaskName.trim()
+    if (!name) return
+    if (!projects.length) return
 
-  const filteredByStatus =
-    activeFilter === 'All'
-      ? visibleTasks
-      : visibleTasks.filter(
-          (task) => toDisplayStatus(task.status) === activeFilter,
-        )
+    setAdding(true)
+    try {
+      const task = await createTask({
+        name,
+        project: projects[0]._id,
+        team: tasks[0]?.team?._id || tasks[0]?.team || undefined,
+        timeToComplete: 1,
+        status: 'To Do',
+        priority: 'Medium',
+      })
+      addTask(task)
+      setNewTaskName('')
+    } catch (e) {
+      console.error('Failed to create task:', e)
+    } finally {
+      setAdding(false)
+    }
+  }
 
-  const previewTasks = filteredByStatus.slice(0, 5)
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') handleAddTask()
+    if (e.key === 'Escape') setNewTaskName('')
+  }
 
-  const stats = {
-    total: tasks.length,
-    inProgress: tasks.filter((t) => toDisplayStatus(t.status) === 'In Progress').length,
-    completed: tasks.filter((t) => toDisplayStatus(t.status) === 'Completed').length,
-    todo: tasks.filter((t) => toDisplayStatus(t.status) === 'To Do').length,
+  if (isLoading) {
+    return (
+      <div className="dash">
+        <div className="dash__empty">Loading workspace…</div>
+      </div>
+    )
   }
 
   return (
-    <section className="page-section">
+    <div className="dash">
 
-      {/* HEADER */}
-      <div className="page-header page-header--with-action">
-        <div>
-          <h1>Dashboard</h1>
-          <p>
-            {isLoading
-              ? 'Loading workspace data...'
-              : error || 'Manage projects, track tasks, and monitor workspace activity.'}
-          </p>
-        </div>
-        <Link to="/tasks" className="dashboard-add-btn">
-          + Add New Task
-        </Link>
-      </div>
-
-      {/* STATS ROW */}
-      <div className="dashboard-stats-row">
-        <article className="dashboard-stat-card">
-          <span className="dashboard-stat-label">Total Tasks</span>
-          <strong className="dashboard-stat-value">{stats.total}</strong>
-        </article>
-        <article className="dashboard-stat-card dashboard-stat-card--progress">
-          <span className="dashboard-stat-label">In Progress</span>
-          <strong className="dashboard-stat-value">{stats.inProgress}</strong>
-        </article>
-        <article className="dashboard-stat-card dashboard-stat-card--completed">
-          <span className="dashboard-stat-label">Completed</span>
-          <strong className="dashboard-stat-value">{stats.completed}</strong>
-        </article>
-        <article className="dashboard-stat-card dashboard-stat-card--todo">
-          <span className="dashboard-stat-label">To Do</span>
-          <strong className="dashboard-stat-value">{stats.todo}</strong>
-        </article>
-      </div>
-
-      {/* PROJECTS */}
-      <div className="dashboard-card">
-        <div className="dashboard-card-header">
-          <h2>Recent Projects</h2>
-          <Link to="/projects" className="dashboard-view-link">
-            View All →
-          </Link>
-        </div>
-
-        <div className="dashboard-project-grid">
-          {previewProjects.length > 0 ? (
-            previewProjects.map((project) => (
-              <Link
-                key={getEntityId(project)}
-                to={`/projects/${getEntityId(project)}`}
-                className="dashboard-project-card"
-              >
-                <div className="dashboard-project-card-top">
-                  <span
-                    className={`project-status ${
-                      project.status === 'Completed'
-                        ? 'project-status-completed'
-                        : project.status === 'In Progress'
-                        ? 'project-status-progress'
-                        : 'project-status-pending'
-                    }`}
-                  >
-                    {project.status || 'Pending'}
-                  </span>
-                </div>
-                <strong>{project.title}</strong>
-                <p>{project.description || 'No description available.'}</p>
-              </Link>
-            ))
-          ) : (
-            <div className="dashboard-empty">
-              {isLoading ? 'Loading projects...' : 'No projects found'}
+      <p className="dash__section-title">Projects</p>
+      <div className="dash__projects">
+        {projects.slice(0, 6).map((project) => (
+          <div
+            key={project._id}
+            className="dash__proj-card"
+            onClick={() => navigate(`/projects/${project._id}`)}
+          >
+            <p className="dash__proj-name">{project.title || project.name}</p>
+            <p className="dash__proj-desc">{project.description || 'No description'}</p>
+            <div className="dash__proj-meta">
+              <span className="dash__proj-tasks">
+                {taskCountForProject(project)} tasks
+              </span>
+              <span className={`dash__badge ${projectBadgeClass(project.status)}`}>
+                {project.status || 'Active'}
+              </span>
             </div>
-          )}
+          </div>
+        ))}
+
+        {projects.length === 0 && (
+          <p className="dash__empty">No projects yet.</p>
+        )}
+      </div>
+
+      <div className="dash__tasks-header">
+        <p className="dash__section-title" style={{ margin: 0 }}>My Tasks</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div className="dash__filters">
+            {STATUS_FILTERS.map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`dash__filter-btn ${filter === f ? 'dash__filter-btn--active' : ''}`}
+                onClick={() => setFilter(f)}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* TASKS */}
-      <div className="dashboard-card">
-        <div className="dashboard-card-header">
-          <h2>My Tasks</h2>
-          <Link to="/tasks" className="dashboard-view-link">
-            View All →
-          </Link>
-        </div>
+      <div className="dash__task-list">
+        {filteredTasks.length === 0 && (
+          <div className="dash__empty">No tasks found.</div>
+        )}
 
-        {/* QUICK FILTERS */}
-        <div className="dashboard-filter-row">
-          <span>Quick Filters:</span>
-          {STATUS_FILTERS.map((filter) => (
+        {filteredTasks.slice(0, 15).map((task) => (
+          <div
+            key={task._id}
+            className="dash__task-row"
+            onClick={() => navigate(`/tasks/${task._id}`)}
+          >
+            <span className={`dash__task-status-dot ${statusDotClass(task.status)}`} />
+            <span className="dash__task-name">{task.title || task.name}</span>
+            {task.dueDate && (
+              <span className="dash__task-due">{task.dueDate}</span>
+            )}
+            {task.assignee && (
+              <span className="dash__task-assignee" title={task.assignee}>
+                {initials(task.assignee)}
+              </span>
+            )}
+            {task.priority && (
+              <span className={`dash__task-priority dash__task-priority--${task.priority.toLowerCase()}`}>
+                {task.priority}
+              </span>
+            )}
+          </div>
+        ))}
+
+        <div className="dash__add-task-row">
+          <FaPlus style={{ fontSize: 12, color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          <input
+            className="dash__add-task-input"
+            type="text"
+            placeholder="Add a task…"
+            value={newTaskName}
+            onChange={(e) => setNewTaskName(e.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+          {newTaskName.trim() && (
             <button
-              key={filter}
               type="button"
-              className={`dashboard-filter-btn ${
-                activeFilter === filter ? 'dashboard-filter-btn--active' : ''
-              }`}
-              onClick={() => setActiveFilter(filter)}
+              className="dash__add-task-submit"
+              onClick={handleAddTask}
+              disabled={adding}
             >
-              {filter}
+              {adding ? 'Adding…' : 'Add'}
             </button>
-          ))}
-        </div>
-
-        <div className="dashboard-task-list">
-          {previewTasks.length > 0 ? (
-            previewTasks.map((task) => (
-              <Link
-                key={getEntityId(task)}
-                to={`/tasks/${getEntityId(task)}`}
-                className="dashboard-task-row"
-              >
-                <div className="dashboard-task-left">
-                  <strong>{task.title || task.name || 'Untitled Task'}</strong>
-                  <p>
-                    {task.project?.title || task.project?.name || task.project || 'No Project'}
-                  </p>
-                </div>
-
-                <div className="dashboard-task-right">
-                  <span>{task.dueDate || 'No Due Date'}</span>
-                  <small
-                    className={`dashboard-task-status ${
-                      toDisplayStatus(task.status) === 'Completed'
-                        ? 'dashboard-task-completed'
-                        : toDisplayStatus(task.status) === 'In Progress'
-                        ? 'dashboard-task-progress'
-                        : toDisplayStatus(task.status) === 'Blocked'
-                        ? 'dashboard-task-blocked'
-                        : 'dashboard-task-pending'
-                    }`}
-                  >
-                    {toDisplayStatus(task.status) || 'Pending'}
-                  </small>
-                </div>
-              </Link>
-            ))
-          ) : (
-            <div className="dashboard-empty">
-              {isLoading ? 'Loading tasks...' : `No ${activeFilter !== 'All' ? activeFilter : ''} tasks found`}
-            </div>
           )}
         </div>
       </div>
 
-    </section>
+    </div>
   )
 }
 

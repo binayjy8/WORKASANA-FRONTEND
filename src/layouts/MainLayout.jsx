@@ -8,19 +8,19 @@ const MainLayout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const location = useLocation()
 
-  // Close sidebar on route change (mobile)
+  // Close sidebar on route change on mobile
   useEffect(() => {
     setSidebarOpen(false)
   }, [location.pathname])
 
-  // Close sidebar on outside click (mobile)
+  // Close on outside click
   const handleBackdropClick = () => setSidebarOpen(false)
 
   return (
     <WorkspaceDataProvider>
       <div className="app-layout">
 
-        {/* Mobile sidebar backdrop */}
+        {/* Mobile backdrop */}
         {sidebarOpen && (
           <div
             className="sidebar-backdrop"
@@ -30,13 +30,12 @@ const MainLayout = ({ children }) => {
         )}
 
         {/* Sidebar — gets open class on mobile */}
-        <div className={sidebarOpen ? 'sidebar--open' : ''}>
+        <div className={`sidebar-wrapper ${sidebarOpen ? 'sidebar-wrapper--open' : ''}`}>
           <Sidebar />
         </div>
 
         <div className="app-main">
           <Navbar onMenuClick={() => setSidebarOpen((prev) => !prev)} />
-
           <main className="app-content">
             {children}
           </main>

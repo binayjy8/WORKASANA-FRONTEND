@@ -1,222 +1,384 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { updateTask } from '../services/taskApi'
+import { useNavigate, useParams } from 'react-router-dom'
+import { FaArrowLeft, FaCheck, FaPen, FaXmark } from 'react-icons/fa6'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
 import { getEntityId, isSameEntityId } from '../utils/entity'
 import { taskStatusOptions, toDisplayStatus } from '../utils/taskUtils'
+import { updateTask } from '../services/taskApi'
 
-const statusPillClass = (status) => {
-  switch (status) {
-    case 'Completed':   return 'task-pill-completed'
-    case 'In Progress': return 'task-pill-progress'
-    case 'Blocked':     return 'task-pill-blocked'
-    default:            return 'task-pill-pending'
-  }
+const PRIORITY = ['Low', 'Medium', 'High']
+
+const statusColor = (status) => {
+  if (status === 'Completed')   return 'tdd__status--completed'
+  if (status === 'In Progress') return 'tdd__status--inprogress'
+  if (status === 'Blocked')     return 'tdd__status--blocked'
+  return 'tdd__status--todo'
 }
 
-// Tag chip input
+const priorityClass = (p) => {
+  if (p === 'High') return 'tdd__chip--high'
+  if (p === 'Low')  return 'tdd__chip--low'
+  return 'tdd__chip--medium'
+}
+
+const fmt = (dateStr) => {
+  if (!dateStr) return null
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+const getTaskDueDate = (task) =>
+  task?.dueDate || task?.deadline || task?.due_date || task?.due || task?.completionDate || ''
+
+const toDateInputValue = (dateStr) => {
+  if (!dateStr) return ''
+  if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+    return dateStr.slice(0, 10)
+  }
+
+  const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const resolveOwner = (owner, users) => {
+  if (!owner) return null
+  if (typeof owner === 'object' && owner.name) return owner.name
+  const found = users.find((u) => isSameEntityId(getEntityId(u), String(owner)))
+  return found?.name || String(owner)
+}
+
+const initials = (name) =>
+  String(name || '?').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+
 const TagInput = ({ tags, onChange }) => {
   const [input, setInput] = useState('')
-  const add = (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault()
-      const val = input.trim().replace(/,$/, '')
-      if (val && !tags.includes(val)) onChange([...tags, val])
-      setInput('')
+  const addTags = (value) => {
+    const nextTags = value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter((tag) => tag && !tags.includes(tag))
+
+    if (nextTags.length) {
+      onChange([...tags, ...nextTags])
     }
+
+    setInput('')
   }
+
+  const handleKeyDown = (e) => {
+    if (e.key !== 'Enter' && e.key !== ',') return
+    e.preventDefault()
+    addTags(input)
+  }
+
   return (
-    <div className="tag-input-wrapper">
+    <div className="tdd__tag-input">
       {tags.map((tag) => (
-        <span key={tag} className="tag-chip">
+        <span key={tag} className="tdd__tag-chip">
           {tag}
-          <button type="button" className="tag-chip-remove"
-            onClick={() => onChange(tags.filter((t) => t !== tag))}>×</button>
+          <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))}>
+            <FaXmark />
+          </button>
         </span>
       ))}
       <input
         type="text"
-        className="tag-chip-input"
-        placeholder={tags.length === 0 ? 'e.g. Urgent…' : ''}
+        placeholder={tags.length === 0 ? 'Type and press Enter…' : ''}
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        onKeyDown={add}
+        onKeyDown={handleKeyDown}
+        onBlur={() => addTags(input)}
       />
     </div>
   )
 }
 
-const InfoRow = ({ label, value }) => (
-  <div className="task-info-row">
-    <span className="task-info-label">{label}</span>
-    <strong className="task-info-value">{value || '—'}</strong>
-  </div>
-)
-
 const TaskDetails = () => {
   const { taskId } = useParams()
-  const { tasks, projects, teams, users, updateTaskInStore, isLoading, error } =
-    useWorkspaceData()
+  const navigate   = useNavigate()
+  const { tasks, projects, teams, users, updateTaskInStore, isLoading } = useWorkspaceData()
 
-  const task = tasks.find((item) => isSameEntityId(getEntityId(item), taskId))
-
-  const project = projects.find(
-    (item) =>
-      isSameEntityId(getEntityId(item), task?.project) ||
-      item.title === task?.project ||
-      item.title === task?.project?.title ||
-      item.title === task?.project?.name,
+  const task    = tasks.find((t) => isSameEntityId(getEntityId(t), taskId))
+  const project = projects.find((p) =>
+    isSameEntityId(getEntityId(p), task?.project?._id || task?.project) ||
+    p.title === task?.project?.title || p.title === task?.project?.name
+  )
+  const team = teams.find((t) =>
+    isSameEntityId(getEntityId(t), task?.team?._id || task?.team) ||
+    t.name === task?.team?.name || t.name === task?.team
   )
 
-  // ── Edit modal state ──────────────────────────────────
-  const [isEditing, setIsEditing]         = useState(false)
-  const [editName, setEditName]           = useState('')
-  const [editProjectId, setEditProjectId] = useState('')
-  const [editTeamId, setEditTeamId]       = useState('')
-  const [editOwners, setEditOwners]       = useState([])
-  const [editTags, setEditTags]           = useState([])
-  const [editTime, setEditTime]           = useState('')
-  const [editDueDate, setEditDueDate]     = useState('')
-  const [editStatus, setEditStatus]       = useState('')
-  const [isSaving, setIsSaving]           = useState(false)
+  const [editing, setEditing]       = useState(false)
+  const [saving, setSaving]         = useState(false)
+  const [formError, setFormError]   = useState('')
+  const [editName, setEditName]     = useState('')
+  const [editProject, setEditProject] = useState('')
+  const [editTeam, setEditTeam]     = useState('')
+  const [editOwners, setEditOwners] = useState([])
+  const [editTags, setEditTags]     = useState([])
+  const [editTime, setEditTime]     = useState('')
+  const [editDue, setEditDue]       = useState('')
+  const [editStatus, setEditStatus] = useState('')
+  const [editPriority, setEditPriority] = useState('Medium')
 
   const openEdit = () => {
     setEditName(task.title || task.name || '')
-    setEditProjectId(getEntityId(project) || '')
-    setEditTeamId(task.team?._id || task.team || '')
-    setEditOwners(task.owners || [])
+    setEditProject(getEntityId(project) || task?.project?._id || task?.project || '')
+    setEditTeam(getEntityId(team) || task?.team?._id || task?.team || '')
+    setEditOwners((task.owners || []).map((o) => typeof o === 'object' ? getEntityId(o) : o))
     setEditTags(task.tags || [])
     setEditTime(String(task.timeToComplete || ''))
-    setEditDueDate(task.dueDate || '')
+    setEditDue(toDateInputValue(getTaskDueDate(task)))
     setEditStatus(toDisplayStatus(task.status))
-    setIsEditing(true)
+    setEditPriority(task.priority || 'Medium')
+    setFormError('')
+    setEditing(true)
   }
 
-  const toggleEditOwner = (uid) =>
-    setEditOwners((prev) =>
-      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid],
-    )
+  const toggleOwner = (uid) =>
+    setEditOwners((prev) => prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid])
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (!editName.trim()) { alert('Task name is required'); return }
+    if (!editName.trim()) { setFormError('Task name is required'); return }
+    setSaving(true)
+    setFormError('')
     try {
-      setIsSaving(true)
-      const updated = await updateTask(getEntityId(task), {
-        name:           editName.trim(),
-        project:        editProjectId || undefined,
-        team:           editTeamId    || undefined,
-        owners:         editOwners,
-        tags:           editTags,
+      const payload = {
+        name: editName.trim(),
+        project: editProject || undefined,
+        team: editTeam || undefined,
+        owners: editOwners,
+        tags: editTags,
         timeToComplete: Number(editTime) || 0,
-        dueDate:        editDueDate || undefined,
-        status:         editStatus,
-      })
+        dueDate: editDue || '',
+        deadline: editDue || '',
+        status: editStatus,
+        priority: editPriority,
+      }
+      const updated = await updateTask(getEntityId(task), payload)
       updateTaskInStore(getEntityId(task), {
         ...updated,
-        title: updated.title || updated.name || editName.trim(),
+        title:          editName.trim(),
+        tags:           editTags,
+        dueDate:        editDue || '',
+        deadline:       editDue || '',
+        priority:       editPriority,
+        status:         editStatus,
+        timeToComplete: Number(editTime) || 0,
+        owners:         editOwners,
       })
-      setIsEditing(false)
+      setEditing(false)
     } catch (err) {
-      console.error(err)
-      alert(err.response?.data?.message || 'Failed to save task')
+      setFormError(err.response?.data?.message || 'Failed to save')
     } finally {
-      setIsSaving(false)
+      setSaving(false)
     }
   }
 
-  // Quick status change (from status card, no modal)
-  const handleStatusChange = async (status) => {
+  const handleStatusChange = async (newStatus) => {
     if (!task) return
     try {
-      const updated = await updateTask(getEntityId(task), { status })
-      updateTaskInStore(getEntityId(task), updated)
+      const updated = await updateTask(getEntityId(task), { status: newStatus })
+      const currentDueDate = getTaskDueDate(task)
+      updateTaskInStore(getEntityId(task), {
+        ...updated,
+        tags: updated.tags?.length ? updated.tags : task.tags || [],
+        dueDate: updated.dueDate || currentDueDate,
+        deadline: updated.deadline || task.deadline || currentDueDate,
+      })
     } catch (err) {
       console.error(err)
-      alert(err.response?.data?.message || 'Failed to update status')
     }
   }
 
-  // ── Loading / not found ───────────────────────────────
-  if (!task && isLoading) {
-    return (
-      <section className="page-section">
-        <div className="page-header"><h1>Loading task…</h1><p>Fetching task details…</p></div>
-      </section>
-    )
+  if (isLoading && !task) {
+    return <div className="tdd__empty">Loading task…</div>
   }
 
   if (!task) {
     return (
-      <section className="page-section">
-        <div className="page-header">
-          <h1>Task not found</h1>
-          <p>This task does not exist or has been removed.</p>
-        </div>
-        <Link to="/tasks" className="project-add-btn" style={{ display: 'inline-flex', marginTop: '1rem' }}>← Back to Tasks</Link>
-      </section>
+      <div className="tdd__empty">
+        <p>Task not found.</p>
+        <button type="button" className="tdd__back" onClick={() => navigate('/tasks')}>
+          <FaArrowLeft /> Back to Tasks
+        </button>
+      </div>
     )
   }
 
   const displayStatus = toDisplayStatus(task.status)
   const isCompleted   = displayStatus === 'Completed'
+  const projectName   = project?.title || task?.project?.title || task?.project?.name || (typeof task?.project === 'string' && task.project.length < 30 ? task.project : null)
+  const teamName      = team?.name || task?.team?.name || (typeof task?.team === 'string' && task.team.length < 30 ? task.team : null)
+  const ownerNames    = (task.owners || []).map((o) => resolveOwner(o, users)).filter(Boolean)
 
   return (
-    <section className="page-section">
+    <div className="tdd">
 
-      {/* ── EDIT MODAL ─────────────────────────────────── */}
-      {isEditing && (
-        <div className="modal-backdrop" onClick={() => setIsEditing(false)}>
-          <div
-            className="task-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="modal-header">
-              <h2>Edit Task</h2>
-              <button type="button" className="modal-close-btn" onClick={() => setIsEditing(false)}>✕</button>
+      <div className="tdd__header">
+        <button type="button" className="tdd__back" onClick={() => navigate(project ? `/projects/${getEntityId(project)}` : '/tasks')}>
+          <FaArrowLeft />
+          <span>Back to {projectName || 'Tasks'}</span>
+        </button>
+        <div className="tdd__header-row">
+          <div>
+            <h1 className="tdd__title">{task.title || task.name || 'Untitled Task'}</h1>
+            <p className="tdd__subtitle">Task Details</p>
+          </div>
+          <button type="button" className="tdd__edit-btn" onClick={openEdit}>
+            <FaPen /><span>Edit Task</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="tdd__grid">
+
+        <div className="tdd__card">
+          <h2 className="tdd__card-title">Task Information</h2>
+          <div className="tdd__info-list">
+
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Project</span>
+              <span className="tdd__info-value">{projectName || '—'}</span>
+            </div>
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Team</span>
+              <span className="tdd__info-value">{teamName || '—'}</span>
+            </div>
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Owners</span>
+              <div className="tdd__info-chips">
+                {ownerNames.length > 0 ? ownerNames.map((name) => (
+                  <span key={name} className="tdd__owner-tag">
+                    <span className="tdd__owner-avatar">{initials(name)}</span>
+                    {name}
+                  </span>
+                )) : <span className="tdd__info-value">—</span>}
+              </div>
+            </div>
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Tags</span>
+              <div className="tdd__info-chips">
+                {task.tags?.length > 0 ? task.tags.map((tag) => (
+                  <span key={tag} className="tdd__tag">{tag}</span>
+                )) : <span className="tdd__info-value">—</span>}
+              </div>
+            </div>
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Due Date</span>
+              <span className="tdd__info-value">{fmt(task.dueDate) || '—'}</span>
+            </div>
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Priority</span>
+              <span className={`tdd__chip ${priorityClass(task.priority)}`}>{task.priority || 'Medium'}</span>
             </div>
 
-            <form className="modal-form" onSubmit={handleSave}>
-              <label className="modal-field">
-                <span>Task Name *</span>
-                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} required autoFocus />
-              </label>
+          </div>
+        </div>
 
-              <div className="modal-row">
-                <label className="modal-field">
-                  <span>Project</span>
-                  <select value={editProjectId} onChange={(e) => setEditProjectId(e.target.value)}>
+        <div className="tdd__card">
+          <h2 className="tdd__card-title">Status &amp; Progress</h2>
+          <div className="tdd__status-box">
+
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Status</span>
+              <span className={`tdd__status-badge ${statusColor(displayStatus)}`}>{displayStatus}</span>
+            </div>
+
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Time Remaining</span>
+              <span className="tdd__info-value">
+                {task.timeToComplete ? `${task.timeToComplete} Days` : '—'}
+              </span>
+            </div>
+
+            <div className="tdd__info-row">
+              <span className="tdd__info-label">Change Status</span>
+              <select
+                className="tdd__status-select"
+                value={displayStatus}
+                onChange={(e) => handleStatusChange(e.target.value)}
+              >
+                {taskStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            {!isCompleted ? (
+              <button
+                type="button"
+                className="tdd__complete-btn"
+                onClick={() => handleStatusChange('Completed')}
+              >
+                <FaCheck /><span>Mark as Complete</span>
+              </button>
+            ) : (
+              <div className="tdd__completed-msg">
+                <FaCheck />
+                <span>This task has been completed!</span>
+              </div>
+            )}
+
+          </div>
+        </div>
+
+      </div>
+
+      {editing && (
+        <div className="tdd__modal-backdrop" onClick={() => setEditing(false)}>
+          <div className="tdd__modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+
+            <div className="tdd__modal-header">
+              <div>
+                <h2 className="tdd__modal-title">Edit Task</h2>
+                <p className="tdd__modal-sub">Update task details</p>
+              </div>
+              <button type="button" className="tdd__modal-close" onClick={() => setEditing(false)}>
+                <FaXmark />
+              </button>
+            </div>
+
+            <form className="tdd__form" onSubmit={handleSave}>
+
+              <div className="tdd__field">
+                <label className="tdd__label">Task Name *</label>
+                <input className="tdd__input" type="text" value={editName}
+                  onChange={(e) => setEditName(e.target.value)} autoFocus />
+              </div>
+
+              <div className="tdd__form-row">
+                <div className="tdd__field">
+                  <label className="tdd__label">Project</label>
+                  <select className="tdd__input" value={editProject} onChange={(e) => setEditProject(e.target.value)}>
                     <option value="">— None —</option>
-                    {projects.map((p) => (
-                      <option key={getEntityId(p)} value={getEntityId(p)}>{p.title}</option>
-                    ))}
+                    {projects.map((p) => <option key={getEntityId(p)} value={getEntityId(p)}>{p.title}</option>)}
                   </select>
-                </label>
-                <label className="modal-field">
-                  <span>Team</span>
-                  <select value={editTeamId} onChange={(e) => setEditTeamId(e.target.value)}>
+                </div>
+                <div className="tdd__field">
+                  <label className="tdd__label">Team</label>
+                  <select className="tdd__input" value={editTeam} onChange={(e) => setEditTeam(e.target.value)}>
                     <option value="">— None —</option>
-                    {teams.map((t) => (
-                      <option key={getEntityId(t)} value={getEntityId(t)}>{t.name}</option>
-                    ))}
+                    {teams.map((t) => <option key={getEntityId(t)} value={getEntityId(t)}>{t.name}</option>)}
                   </select>
-                </label>
+                </div>
               </div>
 
               {users.length > 0 && (
-                <div className="modal-field">
-                  <span>Owners</span>
-                  <div className="modal-owners-grid">
+                <div className="tdd__field">
+                  <label className="tdd__label">Owners</label>
+                  <div className="tdd__owners">
                     {users.map((u) => {
                       const uid = getEntityId(u)
-                      const selected = editOwners.includes(uid)
                       return (
                         <button key={uid} type="button"
-                          className={`owner-chip ${selected ? 'owner-chip--selected' : ''}`}
-                          onClick={() => toggleEditOwner(uid)}>
-                          <span className="owner-chip-avatar">{String(u.name || 'U')[0].toUpperCase()}</span>
+                          className={`tdd__owner-chip ${editOwners.includes(uid) ? 'tdd__owner-chip--on' : ''}`}
+                          onClick={() => toggleOwner(uid)}>
+                          <span className="tdd__owner-chip-avatar">{initials(u.name)}</span>
                           <span>{u.name}</span>
                         </button>
                       )
@@ -225,129 +387,52 @@ const TaskDetails = () => {
                 </div>
               )}
 
-              <div className="modal-field">
-                <span>Tags (Enter or comma to add)</span>
+              <div className="tdd__field">
+                <label className="tdd__label">Tags</label>
                 <TagInput tags={editTags} onChange={setEditTags} />
               </div>
 
-              <div className="modal-row">
-                <label className="modal-field">
-                  <span>Due Date</span>
-                  <input type="date" value={editDueDate} onChange={(e) => setEditDueDate(e.target.value)} />
-                </label>
-                <label className="modal-field">
-                  <span>Time (Days)</span>
-                  <input type="number" min="1" value={editTime} onChange={(e) => setEditTime(e.target.value)} />
-                </label>
+              <div className="tdd__form-row">
+                <div className="tdd__field">
+                  <label className="tdd__label">Due Date</label>
+                  <input className="tdd__input" type="date" value={editDue} onChange={(e) => setEditDue(e.target.value)} />
+                </div>
+                <div className="tdd__field">
+                  <label className="tdd__label">Time (Days)</label>
+                  <input className="tdd__input" type="number" min="1" value={editTime} onChange={(e) => setEditTime(e.target.value)} />
+                </div>
               </div>
 
-              <label className="modal-field">
-                <span>Status</span>
-                <select value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                  {taskStatusOptions.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </label>
-
-              <div className="modal-actions">
-                <button type="submit" className="tasks-add-btn" disabled={isSaving}>
-                  {isSaving ? 'Saving…' : 'Save Changes'}
-                </button>
-                <button type="button" className="modal-cancel-btn" onClick={() => setIsEditing(false)}>
-                  Cancel
-                </button>
+              <div className="tdd__form-row">
+                <div className="tdd__field">
+                  <label className="tdd__label">Priority</label>
+                  <select className="tdd__input" value={editPriority} onChange={(e) => setEditPriority(e.target.value)}>
+                    {PRIORITY.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="tdd__field">
+                  <label className="tdd__label">Status</label>
+                  <select className="tdd__input" value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                    {taskStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
               </div>
+
+              {formError && <p className="tdd__form-error">{formError}</p>}
+
+              <div className="tdd__form-actions">
+                <button type="submit" className="tdd__submit-btn" disabled={saving}>
+                  {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+                <button type="button" className="tdd__cancel-btn" onClick={() => setEditing(false)}>Cancel</button>
+              </div>
+
             </form>
           </div>
         </div>
       )}
 
-      {/* ── HEADER ─────────────────────────────────────── */}
-      <div className="task-details-header">
-        <div>
-          <span className="project-label">TASK</span>
-          <h1>{task.name || task.title || 'Untitled Task'}</h1>
-          <p>{error || 'Review and manage task details.'}</p>
-        </div>
-        <div className="task-details-actions">
-          <button type="button" className="tasks-add-btn" onClick={openEdit}>
-            ✏️ Edit Task
-          </button>
-          <Link to="/tasks" className="modal-cancel-btn task-back-btn">
-            ← Back
-          </Link>
-        </div>
-      </div>
-
-      <div className="task-details-grid">
-
-        {/* TASK INFO */}
-        <div className="dashboard-card task-details-card">
-          <h2>Task Information</h2>
-          <div className="task-info-list">
-            <InfoRow label="Project" value={
-              project?.title || task.project?.title || task.project?.name || task.project
-            } />
-            <InfoRow label="Team"    value={task.team?.name || task.team} />
-            <InfoRow label="Assignee" value={task.assignee} />
-            <InfoRow label="Due Date" value={task.dueDate} />
-            <InfoRow label="Time to Complete"
-              value={task.timeToComplete ? `${task.timeToComplete} Days` : null} />
-            <div className="task-info-row">
-              <span className="task-info-label">Tags</span>
-              <div className="task-tags-row">
-                {task.tags?.length > 0
-                  ? task.tags.map((tag) => <span key={tag} className="task-tag">{tag}</span>)
-                  : <strong className="task-info-value">—</strong>
-                }
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* STATUS — FIX: no duplicate "Task Status" heading + status pill */}
-        <div className="dashboard-card task-details-card">
-          <h2>Update Status</h2>
-          <div className="task-status-box">
-
-            {/* Current status pill */}
-            <div className="task-current-status">
-              <span className="task-info-label">Current Status</span>
-              <span className={`task-pill task-pill--lg ${statusPillClass(displayStatus)}`}>
-                {displayStatus}
-              </span>
-            </div>
-
-            {/* Status select */}
-            <label className="modal-field">
-              <span>Change to</span>
-              <select
-                className="task-status-select"
-                value={displayStatus}
-                onChange={(e) => handleStatusChange(e.target.value)}
-              >
-                {taskStatusOptions.map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            </label>
-
-            {!isCompleted && (
-              <button type="button" className="tasks-add-btn"
-                onClick={() => handleStatusChange('Completed')}>
-                ✓ Mark as Complete
-              </button>
-            )}
-
-            {isCompleted && (
-              <p className="task-completed-msg">✅ This task has been completed!</p>
-            )}
-          </div>
-        </div>
-
-      </div>
-    </section>
+    </div>
   )
 }
 

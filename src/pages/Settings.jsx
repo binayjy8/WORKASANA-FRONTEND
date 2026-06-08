@@ -1,89 +1,65 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { deleteTask, createTask } from '../services/taskApi'
+import { createProject, getProjects } from '../services/api'
+import { useWorkspaceData } from '../hooks/useWorkspaceData'
+import { getEntityId } from '../utils/entity'
+import api from '../services/api'
 
-// Decode JWT token to get user info (no backend call needed)
 const decodeToken = (token) => {
-  try {
-    const payload = token.split('.')[1]
-    const decoded = JSON.parse(atob(payload))
-    return decoded
-  } catch {
-    return null
-  }
+  try { return JSON.parse(atob(token.split('.')[1])) } catch { return null }
 }
 
 const Settings = () => {
   const navigate = useNavigate()
+  const { tasks, projects, teams, removeTask, addProject } = useWorkspaceData()
 
-  const [name, setName]     = useState('')
-  const [email, setEmail]   = useState('')
-  const [role, setRole]     = useState('')
-  const [profileMsg, setProfileMsg] = useState('')
+  // Profile from token
+  const [name, setName]   = useState('')
+  const [email, setEmail] = useState('')
 
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword]         = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [passwordMsg, setPasswordMsg]         = useState({ text: '', type: '' })
+  // Notifications (localStorage)
+  const [notifTaskAssigned,   setNotifTaskAssigned]   = useState(true)
+  const [notifTaskCompleted,  setNotifTaskCompleted]  = useState(true)
+  const [notifProjectUpdates, setNotifProjectUpdates] = useState(false)
+  const [notifWeeklyReport,   setNotifWeeklyReport]   = useState(true)
+  const [notifSaved,          setNotifSaved]          = useState(false)
 
-  const [notifTaskAssigned,    setNotifTaskAssigned]    = useState(true)
-  const [notifTaskCompleted,   setNotifTaskCompleted]   = useState(true)
-  const [notifProjectUpdates,  setNotifProjectUpdates]  = useState(false)
-  const [notifWeeklyReport,    setNotifWeeklyReport]    = useState(true)
-  const [notifSaved,           setNotifSaved]           = useState(false)
+  // Delete states
+  const [selectedTaskId,    setSelectedTaskId]    = useState('')
+  const [selectedProjectId, setSelectedProjectId] = useState('')
+  const [selectedTeamId,    setSelectedTeamId]    = useState('')
+  const [deleteMsg,         setDeleteMsg]         = useState('')
+  const [isDeleting,        setIsDeleting]        = useState(false)
 
-  const [theme,    setTheme]    = useState('light')
-  const [language, setLanguage] = useState('en')
-
-  // ── Load user from JWT token ──────────────────────────
   useEffect(() => {
     const token = localStorage.getItem('token')
-    if (!token) return
-
-    const decoded = decodeToken(token)
-    if (decoded) {
-      setName(decoded.name  || decoded.username || '')
-      setEmail(decoded.email || '')
-      setRole(decoded.role  || 'Team Member')
+    if (token) {
+      const decoded = decodeToken(token)
+      if (decoded) {
+        setName(decoded.name || decoded.username || 'Mohan')
+        setEmail(decoded.email || '')
+      }
+    }
+    const saved = localStorage.getItem('userProfile')
+    if (saved) {
+      try {
+        const p = JSON.parse(saved)
+        if (p.name)  setName(p.name)
+        if (p.email) setEmail(p.email)
+      } catch { /* ignore */ }
+    }
+    const notifPrefs = localStorage.getItem('notifPrefs')
+    if (notifPrefs) {
+      try {
+        const p = JSON.parse(notifPrefs)
+        if (p.notifTaskAssigned   !== undefined) setNotifTaskAssigned(p.notifTaskAssigned)
+        if (p.notifTaskCompleted  !== undefined) setNotifTaskCompleted(p.notifTaskCompleted)
+        if (p.notifProjectUpdates !== undefined) setNotifProjectUpdates(p.notifProjectUpdates)
+        if (p.notifWeeklyReport   !== undefined) setNotifWeeklyReport(p.notifWeeklyReport)
+      } catch { /* ignore */ }
     }
   }, [])
-
-  // ── Profile save — local only (no backend endpoint) ──
-  const handleProfileSave = (e) => {
-    e.preventDefault()
-    // Store in localStorage so it persists across refreshes
-    const token = localStorage.getItem('token')
-    if (token) {
-      localStorage.setItem('userProfile', JSON.stringify({ name, email, role }))
-    }
-    setProfileMsg('success')
-    setTimeout(() => setProfileMsg(''), 3000)
-  }
-
-  // ── Password validation only (no backend endpoint) ───
-  const handlePasswordSave = (e) => {
-    e.preventDefault()
-    if (!currentPassword) {
-      setPasswordMsg({ text: 'Please enter your current password.', type: 'error' })
-      return
-    }
-    if (newPassword.length < 6) {
-      setPasswordMsg({ text: 'New password must be at least 6 characters.', type: 'error' })
-      return
-    }
-    if (newPassword !== confirmPassword) {
-      setPasswordMsg({ text: 'Passwords do not match.', type: 'error' })
-      return
-    }
-    // Backend has no change-password endpoint — show honest message
-    setPasswordMsg({
-      text: 'Password change is not supported by this backend. Only login credentials set during signup are valid.',
-      type: 'warn',
-    })
-    setCurrentPassword('')
-    setNewPassword('')
-    setConfirmPassword('')
-    setTimeout(() => setPasswordMsg({ text: '', type: '' }), 5000)
-  }
 
   const handleNotifSave = () => {
     localStorage.setItem('notifPrefs', JSON.stringify({
@@ -98,36 +74,56 @@ const Settings = () => {
     navigate('/login')
   }
 
-  // Load saved prefs on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('userProfile')
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved)
-        if (parsed.name)  setName(parsed.name)
-        if (parsed.email) setEmail(parsed.email)
-        if (parsed.role)  setRole(parsed.role)
-      } catch { /* ignore */ }
-    }
+  const showMsg = (msg) => {
+    setDeleteMsg(msg)
+    setTimeout(() => setDeleteMsg(''), 3500)
+  }
 
-    const notifPrefs = localStorage.getItem('notifPrefs')
-    if (notifPrefs) {
-      try {
-        const p = JSON.parse(notifPrefs)
-        if (p.notifTaskAssigned   !== undefined) setNotifTaskAssigned(p.notifTaskAssigned)
-        if (p.notifTaskCompleted  !== undefined) setNotifTaskCompleted(p.notifTaskCompleted)
-        if (p.notifProjectUpdates !== undefined) setNotifProjectUpdates(p.notifProjectUpdates)
-        if (p.notifWeeklyReport   !== undefined) setNotifWeeklyReport(p.notifWeeklyReport)
-      } catch { /* ignore */ }
-    }
-  }, [])
+  const handleDeleteTask = async () => {
+    if (!selectedTaskId) { showMsg('⚠️ Please select a task to delete.'); return }
+    if (!window.confirm('Are you sure you want to delete this task?')) return
+    setIsDeleting(true)
+    try {
+      await deleteTask(selectedTaskId)
+      removeTask(selectedTaskId)
+      setSelectedTaskId('')
+      showMsg('✅ Task deleted successfully!')
+    } catch (err) {
+      showMsg('❌ Failed to delete task: ' + (err.response?.data?.message || err.message))
+    } finally { setIsDeleting(false) }
+  }
+
+  const handleDeleteProject = async () => {
+    if (!selectedProjectId) { showMsg('⚠️ Please select a project to delete.'); return }
+    if (!window.confirm('Are you sure? This will delete the project permanently.')) return
+    setIsDeleting(true)
+    try {
+      await api.delete(`/projects/${selectedProjectId}`)
+      showMsg('✅ Project deleted! Refresh the page to see changes.')
+      setSelectedProjectId('')
+    } catch (err) {
+      showMsg('❌ Failed to delete project: ' + (err.response?.data?.message || err.message))
+    } finally { setIsDeleting(false) }
+  }
+
+  const handleDeleteTeam = async () => {
+    if (!selectedTeamId) { showMsg('⚠️ Please select a team to delete.'); return }
+    if (!window.confirm('Are you sure you want to delete this team?')) return
+    setIsDeleting(true)
+    try {
+      await api.delete(`/teams/${selectedTeamId}`)
+      showMsg('✅ Team deleted! Refresh the page to see changes.')
+      setSelectedTeamId('')
+    } catch (err) {
+      showMsg('❌ Failed to delete team: ' + (err.response?.data?.message || err.message))
+    } finally { setIsDeleting(false) }
+  }
 
   return (
     <section className="page-section">
-
       <div className="page-header">
         <h1>Settings</h1>
-        <p>Manage your account, preferences, and workspace configuration.</p>
+        <p>Manage your account, workspace data, and preferences.</p>
       </div>
 
       <div className="settings-grid">
@@ -135,124 +131,23 @@ const Settings = () => {
         {/* ── LEFT ──────────────────────────────────────── */}
         <div className="settings-left">
 
-          {/* PROFILE */}
+          {/* PROFILE — read only from token */}
           <div className="dashboard-card settings-card">
             <div className="settings-card-header">
-              <h2>Profile Information</h2>
-              <p>Update your display name, email, and role.</p>
+              <h2>Profile</h2>
+              <p>Your account information from your login session.</p>
             </div>
-
             <div className="settings-avatar-row">
-              <div className="settings-avatar">
-                {name ? name[0].toUpperCase() : 'U'}
-              </div>
+              <div className="settings-avatar">{name ? name[0].toUpperCase() : 'U'}</div>
               <div>
                 <strong>{name || 'User'}</strong>
-                <span>{email}</span>
+                <span>{email || 'No email'}</span>
               </div>
             </div>
-
-            <form className="settings-form" onSubmit={handleProfileSave}>
-              <label className="modal-field">
-                <span>Full Name</span>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Your full name"
-                  required
-                />
-              </label>
-
-              <label className="modal-field">
-                <span>Email Address</span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  required
-                />
-              </label>
-
-              <label className="modal-field">
-                <span>Role</span>
-                <input
-                  type="text"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  placeholder="e.g. Developer, Designer"
-                />
-              </label>
-
-              {profileMsg === 'success' && (
-                <p className="settings-success-msg">✅ Profile saved locally!</p>
-              )}
-
-              <button type="submit" className="tasks-add-btn">
-                Save Profile
-              </button>
-            </form>
+            <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginTop: '0.5rem' }}>
+              To update your profile, please contact your workspace admin or update via the backend.
+            </p>
           </div>
-
-          {/* CHANGE PASSWORD */}
-          <div className="dashboard-card settings-card">
-            <div className="settings-card-header">
-              <h2>Change Password</h2>
-              <p>Use a strong password of at least 6 characters.</p>
-            </div>
-
-            <form className="settings-form" onSubmit={handlePasswordSave}>
-              <label className="modal-field">
-                <span>Current Password</span>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="Enter current password"
-                />
-              </label>
-
-              <label className="modal-field">
-                <span>New Password</span>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min. 6 characters"
-                />
-              </label>
-
-              <label className="modal-field">
-                <span>Confirm New Password</span>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Re-enter new password"
-                />
-              </label>
-
-              {passwordMsg.text && (
-                <p className={
-                  passwordMsg.type === 'success' ? 'settings-success-msg'
-                  : passwordMsg.type === 'warn'  ? 'settings-warn-msg'
-                  : 'settings-error-msg'
-                }>
-                  {passwordMsg.text}
-                </p>
-              )}
-
-              <button type="submit" className="tasks-add-btn">
-                Update Password
-              </button>
-            </form>
-          </div>
-
-        </div>
-
-        {/* ── RIGHT ─────────────────────────────────────── */}
-        <div className="settings-right">
 
           {/* NOTIFICATIONS */}
           <div className="dashboard-card settings-card">
@@ -260,7 +155,6 @@ const Settings = () => {
               <h2>Notifications</h2>
               <p>Choose what activity you want to be notified about.</p>
             </div>
-
             <div className="settings-toggles">
               {[
                 ['Task Assigned',   'When a task is assigned to you',           notifTaskAssigned,   setNotifTaskAssigned],
@@ -274,59 +168,92 @@ const Settings = () => {
                     <span>{desc}</span>
                   </div>
                   <label className="toggle-switch">
-                    <input
-                      type="checkbox"
-                      checked={value}
-                      onChange={(e) => setter(e.target.checked)}
-                    />
+                    <input type="checkbox" checked={value} onChange={(e) => setter(e.target.checked)} />
                     <span className="toggle-slider" />
                   </label>
                 </div>
               ))}
             </div>
-
-            {notifSaved && (
-              <p className="settings-success-msg" style={{ marginTop: '1rem' }}>
-                ✅ Notification preferences saved!
-              </p>
-            )}
-
-            <button
-              type="button"
-              className="tasks-add-btn"
-              style={{ marginTop: '1rem' }}
-              onClick={handleNotifSave}
-            >
+            {notifSaved && <p className="settings-success-msg" style={{ marginTop: '1rem' }}>✅ Preferences saved!</p>}
+            <button type="button" className="tasks-add-btn" style={{ marginTop: '1rem' }} onClick={handleNotifSave}>
               Save Preferences
             </button>
           </div>
 
-          {/* APPEARANCE */}
+        </div>
+
+        {/* ── RIGHT ─────────────────────────────────────── */}
+        <div className="settings-right">
+
+          {/* DELETE WORKSPACE DATA */}
           <div className="dashboard-card settings-card">
             <div className="settings-card-header">
-              <h2>Appearance</h2>
-              <p>Customize the look and feel of your workspace.</p>
+              <h2>Manage Workspace Data</h2>
+              <p>Delete tasks, projects, or teams from your workspace.</p>
             </div>
 
-            <div className="settings-form">
-              <label className="modal-field">
-                <span>Theme</span>
-                <select value={theme} onChange={(e) => setTheme(e.target.value)}>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                  <option value="system">System Default</option>
-                </select>
-              </label>
+            {deleteMsg && (
+              <p className={deleteMsg.startsWith('✅') ? 'settings-success-msg' : 'settings-error-msg'}
+                style={{ marginBottom: '1rem' }}>
+                {deleteMsg}
+              </p>
+            )}
 
+            {/* DELETE TASK */}
+            <div className="settings-delete-section">
               <label className="modal-field">
-                <span>Language</span>
-                <select value={language} onChange={(e) => setLanguage(e.target.value)}>
-                  <option value="en">English</option>
-                  <option value="hi">Hindi</option>
-                  <option value="es">Spanish</option>
-                  <option value="fr">French</option>
+                <span>Delete Task</span>
+                <select value={selectedTaskId} onChange={(e) => setSelectedTaskId(e.target.value)}>
+                  <option value="">— Select a task —</option>
+                  {tasks.map((t) => (
+                    <option key={getEntityId(t)} value={getEntityId(t)}>
+                      {t.title || t.name || 'Untitled'}
+                    </option>
+                  ))}
                 </select>
               </label>
+              <button type="button" className="settings-delete-btn"
+                onClick={handleDeleteTask} disabled={isDeleting || !selectedTaskId}>
+                🗑 Delete Task
+              </button>
+            </div>
+
+            {/* DELETE PROJECT */}
+            <div className="settings-delete-section">
+              <label className="modal-field">
+                <span>Delete Project</span>
+                <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+                  <option value="">— Select a project —</option>
+                  {projects.map((p) => (
+                    <option key={getEntityId(p)} value={getEntityId(p)}>
+                      {p.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="settings-delete-btn"
+                onClick={handleDeleteProject} disabled={isDeleting || !selectedProjectId}>
+                🗑 Delete Project
+              </button>
+            </div>
+
+            {/* DELETE TEAM */}
+            <div className="settings-delete-section">
+              <label className="modal-field">
+                <span>Delete Team</span>
+                <select value={selectedTeamId} onChange={(e) => setSelectedTeamId(e.target.value)}>
+                  <option value="">— Select a team —</option>
+                  {teams.map((t) => (
+                    <option key={getEntityId(t)} value={getEntityId(t)}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className="settings-delete-btn"
+                onClick={handleDeleteTeam} disabled={isDeleting || !selectedTeamId}>
+                🗑 Delete Team
+              </button>
             </div>
           </div>
 
@@ -334,20 +261,15 @@ const Settings = () => {
           <div className="dashboard-card settings-card settings-danger-card">
             <div className="settings-card-header">
               <h2>Account</h2>
-              <p>Manage your session and account access.</p>
+              <p>Manage your session.</p>
             </div>
-
             <div className="settings-danger-actions">
               <div className="settings-danger-row">
                 <div>
                   <strong>Sign Out</strong>
                   <span>Log out of your current session</span>
                 </div>
-                <button
-                  type="button"
-                  className="settings-logout-btn"
-                  onClick={handleLogout}
-                >
+                <button type="button" className="settings-logout-btn" onClick={handleLogout}>
                   Sign Out
                 </button>
               </div>
@@ -356,7 +278,6 @@ const Settings = () => {
 
         </div>
       </div>
-
     </section>
   )
 }

@@ -246,3 +246,44 @@
   padding: 0.5rem 0.75rem;
   line-height: 1.5;
 }
+
+/* Delete sections */
+.settings-delete-section {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--color-border, #f3f4f6);
+}
+
+.settings-delete-section:last-child {
+  border-bottom: none;
+}
+
+.settings-delete-section .modal-field {
+  flex: 1;
+}
+
+.settings-delete-btn {
+  padding: 0.6rem 1rem;
+  border-radius: 7px;
+  border: 1.5px solid #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.12s;
+  height: 42px;
+}
+
+.settings-delete-btn:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.settings-delete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

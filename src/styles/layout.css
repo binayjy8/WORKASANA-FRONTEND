@@ -1,9 +1,21 @@
-/* ── App Layout ─────────────────────────────────────── */
-
 .app-layout {
   display: flex;
-  min-height: 100vh;
-  background: var(--color-bg, #f9fafb);
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar-wrapper {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.sidebar-backdrop {
+  display: none;
 }
 
 .app-main {
@@ -11,54 +23,13 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  margin-left: var(--sidebar-width, 240px);
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-content {
   flex: 1;
-  padding: 2rem;
   overflow-y: auto;
-}
-
-/* ── Page sections ──────────────────────────────────── */
-
-.page-section {
-  max-width: 1200px;
-  width: 100%;
-}
-
-.page-header {
-  margin-bottom: 1.75rem;
-}
-
-.page-header h1 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--color-text, #111827);
-  margin-bottom: 0.3rem;
-}
-
-.page-header p {
-  font-size: 0.875rem;
-  color: var(--color-text-muted, #6b7280);
-}
-
-.page-header--with-action {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-/* ── Responsive ─────────────────────────────────────── */
-
-@media (max-width: 768px) {
-  .app-main {
-    margin-left: 0;
-  }
-
-  .app-content {
-    padding: 1rem;
-  }
+  padding: 24px;
+  background: var(--color-bg);
 }

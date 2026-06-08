@@ -1,179 +1,219 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { FaArrowLeft, FaPen, FaPlus, FaXmark, FaUsers } from 'react-icons/fa6'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
+import { createTeam, updateTeam } from '../services/api'
 import { getEntityId } from '../utils/entity'
-import { sortTasks, taskStatusOptions, toDisplayStatus } from '../utils/taskUtils'
-import EmptyState from '../components/EmptyState'
-import { createTeam } from '../services/api'
 
-const statusPillClass = (status) => {
-  switch (status) {
-    case 'Completed':   return 'task-pill-completed'
-    case 'In Progress': return 'task-pill-progress'
-    case 'Blocked':     return 'task-pill-blocked'
-    default:            return 'task-pill-pending'
-  }
-}
-
-const AVATAR_COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6']
-const avatarColor = (name) => AVATAR_COLORS[String(name || '').charCodeAt(0) % AVATAR_COLORS.length]
-const getInitials = (name) => String(name || 'U').split(' ').map((p) => p[0]).join('').toUpperCase().slice(0, 2)
-
-const VIEWS = ['By Member', 'By Team']
+const getInitials = (name) =>
+  String(name || '?')
+    .split(' ')
+    .map((word) => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
 const Teams = () => {
-  const {
-    filteredUsers,
-    filteredTasks,
-    teams,
-    searchQuery,
-    isLoading,
-    error,
-    addTeam,
-  } = useWorkspaceData()
+  const navigate = useNavigate()
+  const { teams, isLoading, addTeam, updateTeamInStore } = useWorkspaceData()
 
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [view, setView] = useState('By Member')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedTeam, setSelectedTeam] = useState(null)
+  const [name, setName] = useState('')
+  const [desc, setDesc] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
 
-  // ── Create team modal ─────────────────────────────────
-  const [isModalOpen, setIsModalOpen]   = useState(false)
-  const [teamName, setTeamName]         = useState('')
-  const [teamDesc, setTeamDesc]         = useState('')
-  const [isCreating, setIsCreating]     = useState(false)
+  const isEditing = Boolean(selectedTeam)
 
-  const closeModal = () => {
-    setIsModalOpen(false)
-    setTeamName('')
-    setTeamDesc('')
+  const resetForm = () => {
+    setSelectedTeam(null)
+    setName('')
+    setDesc('')
+    setFormError('')
   }
 
-  const handleCreateTeam = async (e) => {
-    e.preventDefault()
-    if (!teamName.trim()) { alert('Please enter a team name'); return }
+  const openCreateModal = () => {
+    resetForm()
+    setModalOpen(true)
+  }
+
+  const openEditModal = (team) => {
+    setSelectedTeam(team)
+    setName(team.name || team.title || '')
+    setDesc(team.description || '')
+    setFormError('')
+    setModalOpen(true)
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    resetForm()
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+
+    const payload = {
+      name: name.trim(),
+      description: desc.trim(),
+    }
+
+    if (!payload.name) {
+      setFormError('Team name is required')
+      return
+    }
+
+    setSaving(true)
+    setFormError('')
+
     try {
-      setIsCreating(true)
-      const created = await createTeam({
-        name:        teamName.trim(),
-        description: teamDesc.trim(),
-      })
-      addTeam(created)
+      if (isEditing) {
+        const teamId = getEntityId(selectedTeam)
+
+        if (!teamId) {
+          setFormError('This team cannot be updated because it has no id.')
+          return
+        }
+
+        const updated = await updateTeam(teamId, payload)
+        updateTeamInStore(teamId, { ...selectedTeam, ...updated, ...payload })
+      } else {
+        const created = await createTeam(payload)
+        addTeam({ ...payload, ...created })
+      }
+
       closeModal()
-    } catch (err) {
-      console.error(err)
-      alert(err.response?.data?.message || 'Failed to create team')
+    } catch (error) {
+      setFormError(
+        error.response?.data?.message ||
+          `Failed to ${isEditing ? 'update' : 'create'} team`,
+      )
     } finally {
-      setIsCreating(false)
+      setSaving(false)
     }
   }
 
-  const statusFilter = searchParams.get('status') || ''
-  const sortBy       = searchParams.get('sort')   || ''
-
-  const updateFilter = (key, value) => {
-    const next = new URLSearchParams(searchParams)
-    value ? next.set(key, value) : next.delete(key)
-    setSearchParams(next)
-  }
-
-  const getMemberTasks = (member) => {
-    const raw = filteredTasks.filter((task) =>
-      String(task.assignee || '').toLowerCase().includes(member.name.toLowerCase()),
-    )
-    const filtered = statusFilter
-      ? raw.filter((t) => toDisplayStatus(t.status) === statusFilter)
-      : raw
-    return sortTasks(filtered, sortBy)
-  }
-
-  const getTeamTasks = (team) => {
-    const raw = filteredTasks.filter((task) => {
-      const taskTeam = task.team?.name || task.team || ''
-      return String(taskTeam).toLowerCase().includes(team.name.toLowerCase())
-    })
-    const filtered = statusFilter
-      ? raw.filter((t) => toDisplayStatus(t.status) === statusFilter)
-      : raw
-    return sortTasks(filtered, sortBy)
-  }
-
-  const TaskList = ({ tasks: taskList }) => {
-    if (taskList.length === 0) return <p className="empty-message">No tasks assigned</p>
-    return (
-      <div className="project-task-list">
-        {taskList.map((task) => {
-          const status = toDisplayStatus(task.status)
-          return (
-            <Link key={getEntityId(task)} to={`/tasks/${getEntityId(task)}`} className="project-task-row">
-              <div className="project-task-info">
-                <strong>{task.title || task.name || 'Untitled'}</strong>
-                <p>{task.project?.title || task.project?.name || 'No Project'}</p>
-              </div>
-              <div className="project-task-meta">
-                <span className={`task-pill ${statusPillClass(status)}`}>{status}</span>
-                <small>{task.dueDate || 'No due date'}</small>
-              </div>
-            </Link>
-          )
-        })}
-      </div>
-    )
-  }
-
   return (
-    <section className="page-section">
+    <div className="tm">
+      <button type="button" className="tm__back" onClick={() => navigate('/dashboard')}>
+        <FaArrowLeft />
+        <span>Back to Dashboard</span>
+      </button>
 
-      {/* HEADER */}
-      <div className="page-header page-header--with-action">
+      <div className="tm__header">
         <div>
-          <h1>Teams</h1>
-          <p>
-            {isLoading ? 'Loading team members…'
-              : error || 'Manage workspace members and task ownership.'}
+          <h1 className="tm__title">Teams</h1>
+          <p className="tm__subtitle">
+            {isLoading ? 'Loading teams...' : 'Create teams and keep their details up to date.'}
           </p>
         </div>
-        <button type="button" className="tasks-add-btn" onClick={() => setIsModalOpen(true)}>
-          + New Team
+
+        <button type="button" className="tm__new-btn" onClick={openCreateModal}>
+          <FaPlus />
+          <span>New Team</span>
         </button>
       </div>
 
-      {/* ── CREATE TEAM MODAL ────────────────────────────── */}
-      {isModalOpen && (
-        <div className="modal-backdrop" onClick={closeModal}>
-          <div className="project-modal" onClick={(e) => e.stopPropagation()}
-            role="dialog" aria-modal="true">
-            <div className="modal-header">
-              <div>
-                <h2>Create New Team</h2>
-                <p>Add a new team to your workspace</p>
+      <div className="tm__list">
+        {isLoading ? (
+          <div className="tm__empty">Loading teams...</div>
+        ) : teams.length === 0 ? (
+          <div className="tm__empty">
+            <FaUsers className="tm__empty-icon" />
+            <p>No teams yet. Create your first team.</p>
+          </div>
+        ) : (
+          teams.map((team) => {
+            const teamId = getEntityId(team)
+            const teamName = team.name || team.title || 'Untitled Team'
+
+            return (
+              <div key={teamId || teamName} className="tm__row">
+                <div className="tm__row-avatar">{getInitials(teamName)}</div>
+
+                <div className="tm__row-info">
+                  <p className="tm__row-name">{teamName}</p>
+                  <p className="tm__row-desc">
+                    {team.description || 'No description added yet.'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="tm__icon-btn"
+                  onClick={() => openEditModal(team)}
+                  aria-label={`Edit ${teamName}`}
+                  title="Edit team"
+                >
+                  <FaPen />
+                </button>
               </div>
-              <button type="button" className="modal-close-btn" onClick={closeModal}>✕</button>
+            )
+          })
+        )}
+
+        <div className="tm__add-row">
+          <button type="button" className="tm__add-inline-btn" onClick={openCreateModal}>
+            <FaPlus />
+            <span>Add Team</span>
+          </button>
+        </div>
+      </div>
+
+      {modalOpen && (
+        <div className="tm__modal-backdrop" onClick={closeModal}>
+          <div className="tm__modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
+            <div className="tm__modal-header">
+              <div>
+                <h2 className="tm__modal-title">
+                  {isEditing ? 'Update Team' : 'Create Team'}
+                </h2>
+                <p className="tm__modal-sub">
+                  {isEditing ? 'Edit the team name and description.' : 'Add a team to your workspace.'}
+                </p>
+              </div>
+
+              <button type="button" className="tm__modal-close" onClick={closeModal} aria-label="Close">
+                <FaXmark />
+              </button>
             </div>
-            <form className="modal-form" onSubmit={handleCreateTeam}>
-              <label className="modal-field">
-                <span>Team Name *</span>
+
+            <form className="tm__form" onSubmit={handleSubmit}>
+              <div className="tm__field">
+                <label className="tm__label" htmlFor="team-name">Team Name</label>
                 <input
+                  id="team-name"
+                  className="tm__input"
                   type="text"
-                  placeholder="e.g. Development, Marketing"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  required
+                  placeholder="Development"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
                   autoFocus
                 />
-              </label>
-              <label className="modal-field">
-                <span>Description</span>
+              </div>
+
+              <div className="tm__field">
+                <label className="tm__label" htmlFor="team-description">Description</label>
                 <textarea
-                  placeholder="What does this team work on?"
-                  value={teamDesc}
-                  onChange={(e) => setTeamDesc(e.target.value)}
+                  id="team-description"
+                  className="tm__input tm__textarea"
+                  placeholder="What this team owns"
+                  value={desc}
+                  onChange={(event) => setDesc(event.target.value)}
                   rows={3}
                 />
-              </label>
-              <div className="modal-actions">
-                <button type="submit" className="project-submit-btn" disabled={isCreating}>
-                  {isCreating ? 'Creating…' : 'Create Team'}
+              </div>
+
+              {formError && <p className="tm__form-error">{formError}</p>}
+
+              <div className="tm__form-actions">
+                <button type="submit" className="tm__submit-btn" disabled={saving}>
+                  {saving
+                    ? isEditing ? 'Updating...' : 'Creating...'
+                    : isEditing ? 'Update Team' : 'Create Team'}
                 </button>
-                <button type="button" className="modal-cancel-btn" onClick={closeModal}>
+                <button type="button" className="tm__cancel-btn" onClick={closeModal}>
                   Cancel
                 </button>
               </div>
@@ -181,136 +221,7 @@ const Teams = () => {
           </div>
         </div>
       )}
-
-      {/* STATS */}
-      <div className="teams-stats-row">
-        <div className="dashboard-stat-card">
-          <span className="dashboard-stat-label">Total Members</span>
-          <strong className="dashboard-stat-value">{filteredUsers.length}</strong>
-        </div>
-        <div className="dashboard-stat-card dashboard-stat-card--progress">
-          <span className="dashboard-stat-label">Active Tasks</span>
-          <strong className="dashboard-stat-value">
-            {filteredTasks.filter((t) => toDisplayStatus(t.status) === 'In Progress').length}
-          </strong>
-        </div>
-        <div className="dashboard-stat-card dashboard-stat-card--completed">
-          <span className="dashboard-stat-label">Completed Tasks</span>
-          <strong className="dashboard-stat-value">
-            {filteredTasks.filter((t) => toDisplayStatus(t.status) === 'Completed').length}
-          </strong>
-        </div>
-      </div>
-
-      {/* FILTERS + VIEW TOGGLE */}
-      <div className="dashboard-card">
-        <div className="project-toolbar">
-          <div className="project-toolbar-group">
-            {VIEWS.map((v) => (
-              <button key={v} type="button"
-                className={`toolbar-sort-btn ${view === v ? 'toolbar-sort-btn--active' : ''}`}
-                onClick={() => setView(v)}>
-                {v}
-              </button>
-            ))}
-          </div>
-          <div className="project-toolbar-group">
-            <select value={statusFilter} onChange={(e) => updateFilter('status', e.target.value)}>
-              <option value="">All Statuses</option>
-              {taskStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <select value={sortBy} onChange={(e) => updateFilter('sort', e.target.value)}>
-              <option value="">Default Sort</option>
-              <option value="dueDate">Due Date</option>
-              <option value="priority">Priority</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* ── BY MEMBER ────────────────────────────────────── */}
-      {view === 'By Member' && (
-        filteredUsers.length > 0 ? (
-          <div className="teams-member-grid">
-            {filteredUsers.map((member) => {
-              const memberTasks = getMemberTasks(member)
-              const completed   = memberTasks.filter(
-                (t) => toDisplayStatus(t.status) === 'Completed').length
-              return (
-                <article className="team-member-card" key={getEntityId(member)}>
-                  <div className="team-member-header">
-                    <div className="team-card__avatar" style={{ background: avatarColor(member.name) }}>
-                      {getInitials(member.name)}
-                    </div>
-                    <div className="team-member-info">
-                      <h3>{member.name}</h3>
-                      <p>{member.role || 'Team Member'}</p>
-                      <span>{member.email}</span>
-                    </div>
-                    <div className="team-member-stats">
-                      <div><strong>{memberTasks.length}</strong><small>Tasks</small></div>
-                      <div><strong>{completed}</strong><small>Done</small></div>
-                    </div>
-                  </div>
-                  <div className="team-task-section">
-                    <div className="project-task-header">
-                      <h4>Assigned Tasks</h4>
-                      <span>{memberTasks.length}</span>
-                    </div>
-                    <TaskList tasks={memberTasks} />
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        ) : (
-          <EmptyState icon="👥" title="No team members found"
-            description={searchQuery ? 'Try a different search term.' : 'Members will appear here.'} />
-        )
-      )}
-
-      {/* ── BY TEAM ──────────────────────────────────────── */}
-      {view === 'By Team' && (
-        teams.length > 0 ? (
-          <div className="teams-member-grid">
-            {teams.map((team) => {
-              const teamTasks  = getTeamTasks(team)
-              const completed  = teamTasks.filter((t) => toDisplayStatus(t.status) === 'Completed').length
-              const inProgress = teamTasks.filter((t) => toDisplayStatus(t.status) === 'In Progress').length
-              return (
-                <article className="team-member-card" key={getEntityId(team)}>
-                  <div className="team-member-header">
-                    <div className="team-card__avatar"
-                      style={{ background: avatarColor(team.name), borderRadius: '10px', fontSize: '0.8rem' }}>
-                      {getInitials(team.name)}
-                    </div>
-                    <div className="team-member-info">
-                      <h3>{team.name}</h3>
-                      <p>{team.description || 'Team'}</p>
-                    </div>
-                    <div className="team-member-stats">
-                      <div><strong>{teamTasks.length}</strong><small>Tasks</small></div>
-                      <div><strong>{completed}</strong><small>Done</small></div>
-                      <div><strong>{inProgress}</strong><small>Active</small></div>
-                    </div>
-                  </div>
-                  <div className="team-task-section">
-                    <div className="project-task-header">
-                      <h4>Team Tasks</h4><span>{teamTasks.length}</span>
-                    </div>
-                    <TaskList tasks={teamTasks} />
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        ) : (
-          <EmptyState icon="🏢" title="No teams found"
-            description="Create your first team using the button above." />
-        )
-      )}
-
-    </section>
+    </div>
   )
 }
 

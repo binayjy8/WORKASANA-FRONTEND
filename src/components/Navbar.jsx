@@ -1,30 +1,26 @@
 import { useRef, useState, useEffect } from 'react'
-import {
-  FaBars,
-  FaChevronDown,
-  FaMagnifyingGlass,
-  FaPlus,
-  FaRightFromBracket,
-  FaUser,
-} from 'react-icons/fa6'
+import { FaBars, FaChevronDown, FaMagnifyingGlass, FaPlus, FaRightFromBracket, FaUser } from 'react-icons/fa6'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
 
 const pageTitles = {
-  '/dashboard': { title: 'Dashboard',      description: 'Track work, teams, and delivery in one place.' },
-  '/projects':  { title: 'Projects',       description: 'Manage project progress, status, and ownership.' },
-  '/tasks':     { title: 'Tasks',          description: 'Organize work by status, due date, and priority.' },
-  '/teams':     { title: 'Teams',          description: 'View workspace members and project ownership.' },
-  '/reports':   { title: 'Reports',        description: 'Review project health and task completion.' },
-  '/settings':  { title: 'Settings',       description: 'Manage your account and workspace preferences.' },
+  '/dashboard': { title: 'Dashboard',  description: 'Track work, teams, and delivery in one place.' },
+  '/projects':  { title: 'Projects',   description: 'Manage project progress, status, and ownership.' },
+  '/tasks':     { title: 'Tasks',      description: 'Organize work by status, due date, and priority.' },
+  '/teams':     { title: 'Teams',      description: 'View workspace members and project ownership.' },
+  '/reports':   { title: 'Reports',    description: 'Review project health and task completion.' },
+  '/settings':  { title: 'Settings',   description: 'Manage your account and workspace preferences.' },
 }
 
+// Only show search on these pages
+const SEARCH_PAGES = ['/dashboard', '/projects', '/tasks']
+
 const Navbar = ({ onMenuClick }) => {
-  const { pathname }                  = useLocation()
-  const navigate                      = useNavigate()
+  const { pathname }                    = useLocation()
+  const navigate                        = useNavigate()
   const { searchQuery, setSearchQuery } = useWorkspaceData()
-  const [profileOpen, setProfileOpen] = useState(false)
-  const profileRef                    = useRef(null)
+  const [profileOpen, setProfileOpen]   = useState(false)
+  const profileRef                      = useRef(null)
 
   useEffect(() => {
     const handler = (e) => {
@@ -46,15 +42,15 @@ const Navbar = ({ onMenuClick }) => {
     ? { title: 'Task Details',    description: 'Review and manage task details.' }
     : pageTitles[pathname] || pageTitles['/dashboard']
 
+  const showSearch = SEARCH_PAGES.includes(pathname) || pathname.startsWith('/projects/')
+
   return (
     <header className="navbar">
 
-      {/* HAMBURGER — mobile only */}
-      {onMenuClick && (
-        <button type="button" className="navbar__hamburger" onClick={onMenuClick} aria-label="Toggle menu">
-          <FaBars />
-        </button>
-      )}
+      {/* HAMBURGER — always visible on mobile */}
+      <button type="button" className="navbar__hamburger" onClick={onMenuClick} aria-label="Toggle menu">
+        <FaBars />
+      </button>
 
       {/* PAGE TITLE */}
       <div className="navbar__title">
@@ -65,41 +61,36 @@ const Navbar = ({ onMenuClick }) => {
       {/* ACTIONS */}
       <div className="navbar__actions">
 
-        {/* SEARCH */}
-        <label className="navbar__search">
-          <FaMagnifyingGlass className="navbar__search-icon" />
-          <input
-            type="search"
-            placeholder="Search tasks, projects…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="navbar__search-clear"
-              onClick={() => setSearchQuery('')}
-              aria-label="Clear search"
-            >
-              ✕
-            </button>
-          )}
-        </label>
+        {/* SEARCH — only on dashboard, projects, tasks */}
+        {showSearch && (
+          <label className="navbar__search">
+            <FaMagnifyingGlass className="navbar__search-icon" />
+            <input
+              type="search"
+              placeholder="Search tasks, projects…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button type="button" className="navbar__search-clear"
+                onClick={() => setSearchQuery('')} aria-label="Clear search">
+                ✕
+              </button>
+            )}
+          </label>
+        )}
 
-        {/* NEW TASK — navigates to tasks page */}
-        <button type="button" className="navbar__button" onClick={() => navigate('/tasks')}>
-          <FaPlus />
-          <span>New Task</span>
-        </button>
+        {/* NEW TASK button — only on task-related pages
+        {(pathname === '/tasks' || pathname === '/dashboard' || pathname.startsWith('/projects/')) && (
+          <button type="button" className="navbar__button" onClick={() => navigate('/tasks')}>
+            <FaPlus /><span>New Task</span>
+          </button>
+        )} */}
 
         {/* PROFILE DROPDOWN */}
         <div className="navbar__profile-wrapper" ref={profileRef}>
-          <button
-            type="button"
-            className="navbar__profile"
-            onClick={() => setProfileOpen((prev) => !prev)}
-            aria-expanded={profileOpen}
-          >
+          <button type="button" className="navbar__profile"
+            onClick={() => setProfileOpen((p) => !p)} aria-expanded={profileOpen}>
             <span className="navbar__avatar">M</span>
             <span className="navbar__profile-name">Mohan</span>
             <FaChevronDown className={`navbar__chevron ${profileOpen ? 'navbar__chevron--open' : ''}`} />

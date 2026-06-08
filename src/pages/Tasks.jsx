@@ -1,24 +1,33 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import EmptyState from '../components/EmptyState'
-import TaskCard from '../components/TaskCards'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { FaPlus, FaXmark } from 'react-icons/fa6'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
 import { getEntityId } from '../utils/entity'
 import { createTask } from '../services/taskApi'
-import {
-  filterTasksByParams,
-  sortTasks,
-  taskStatusOptions,
-  toDisplayStatus,
-} from '../utils/taskUtils'
+import { filterTasksByParams, sortTasks, taskStatusOptions, toDisplayStatus } from '../utils/taskUtils'
 
-const TASK_GROUPS = ['To Do', 'In Progress', 'Completed', 'Blocked']
+const GROUPS    = ['To Do', 'In Progress', 'Completed', 'Blocked']
+const PRIORITY  = ['Low', 'Medium', 'High']
 
-// ── Tag chip input ────────────────────────────────────────
+const statusDotClass = (status) => {
+  if (status === 'In Progress') return 'tk__dot--inprogress'
+  if (status === 'Completed')   return 'tk__dot--completed'
+  if (status === 'Blocked')     return 'tk__dot--blocked'
+  return 'tk__dot--todo'
+}
+
+const priorityClass = (p) => {
+  if (p === 'High')   return 'tk__chip--high'
+  if (p === 'Low')    return 'tk__chip--low'
+  return 'tk__chip--medium'
+}
+
+const initials = (name) =>
+  String(name || '?').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+
 const TagInput = ({ tags, onChange }) => {
   const [input, setInput] = useState('')
-
-  const addTag = (e) => {
+  const add = (e) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault()
       const val = input.trim().replace(/,$/, '')
@@ -26,60 +35,48 @@ const TagInput = ({ tags, onChange }) => {
       setInput('')
     }
   }
-
-  const removeTag = (tag) => onChange(tags.filter((t) => t !== tag))
-
   return (
-    <div className="tag-input-wrapper">
+    <div className="tk__tag-input">
       {tags.map((tag) => (
-        <span key={tag} className="tag-chip">
+        <span key={tag} className="tk__tag-chip">
           {tag}
-          <button type="button" className="tag-chip-remove" onClick={() => removeTag(tag)}>×</button>
+          <button type="button" onClick={() => onChange(tags.filter((t) => t !== tag))}>
+            <FaXmark />
+          </button>
         </span>
       ))}
       <input
         type="text"
-        className="tag-chip-input"
-        placeholder={tags.length === 0 ? 'e.g. Urgent, Bug…' : ''}
+        placeholder={tags.length === 0 ? 'Type and press Enter…' : ''}
         value={input}
         onChange={(e) => setInput(e.target.value)}
-        onKeyDown={addTag}
+        onKeyDown={add}
       />
     </div>
   )
 }
 
 const Tasks = () => {
-  const {
-    filteredTasks,
-    projects,
-    teams,
-    users,
-    isLoading,
-    error,
-    addTask,
-  } = useWorkspaceData()
-
+  const navigate = useNavigate()
+  const { filteredTasks, projects, teams, users, isLoading, error, addTask } = useWorkspaceData()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // ── Create modal state ────────────────────────────────
-  const [isModalOpen, setIsModalOpen]             = useState(false)
-  const [isCreating, setIsCreating]               = useState(false)
-  const [taskName, setTaskName]                   = useState('')
-  const [selectedProjectId, setSelectedProjectId] = useState('')
-  const [selectedTeamId, setSelectedTeamId]       = useState('')
-  const [selectedOwners, setSelectedOwners]       = useState([])
-  const [tags, setTags]                           = useState([])
-  const [timeToComplete, setTimeToComplete]       = useState('1')
-  const [dueDate, setDueDate]                     = useState('')
-  const [status, setStatus]                       = useState('To Do')
+  const [modalOpen, setModalOpen]         = useState(false)
+  const [creating, setCreating]           = useState(false)
+  const [formError, setFormError]         = useState('')
+  const [taskName, setTaskName]           = useState('')
+  const [projectId, setProjectId]         = useState('')
+  const [teamId, setTeamId]               = useState('')
+  const [owners, setOwners]               = useState([])
+  const [tags, setTags]                   = useState([])
+  const [time, setTime]                   = useState('1')
+  const [dueDate, setDueDate]             = useState('')
+  const [status, setStatus]               = useState('To Do')
+  const [priority, setPriority]           = useState('Medium')
 
-  const defaultProjectId = projects.length > 0 ? getEntityId(projects[0]) : ''
-  const defaultTeamId    = teams.length > 0    ? getEntityId(teams[0])    : ''
-  const projectId = selectedProjectId || defaultProjectId
-  const teamId    = selectedTeamId    || defaultTeamId
+  const resolvedProject = projectId || (projects[0] ? getEntityId(projects[0]) : '')
+  const resolvedTeam    = teamId    || (teams[0]    ? getEntityId(teams[0])    : '')
 
-  // ── Filtered + sorted tasks ───────────────────────────
   const visibleTasks = sortTasks(
     filterTasksByParams(filteredTasks, searchParams),
     searchParams.get('sort'),
@@ -91,142 +88,204 @@ const Tasks = () => {
     setSearchParams(next)
   }
 
-  const clearFilters = () => setSearchParams({})
-  const hasFilters   = searchParams.toString() !== ''
-
-  const toggleOwner = (uid) => {
-    setSelectedOwners((prev) =>
-      prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid],
-    )
-  }
+  const toggleOwner = (uid) =>
+    setOwners((prev) => prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid])
 
   const closeModal = () => {
-    setIsModalOpen(false)
-    setTaskName('')
-    setTags([])
-    setTimeToComplete('1')
-    setDueDate('')
-    setStatus('To Do')
-    setSelectedProjectId('')
-    setSelectedTeamId('')
-    setSelectedOwners([])
+    setModalOpen(false)
+    setTaskName(''); setProjectId(''); setTeamId('')
+    setOwners([]); setTags([]); setTime('1')
+    setDueDate(''); setStatus('To Do'); setPriority('Medium')
+    setFormError('')
   }
 
-  const handleCreateTask = async (event) => {
-    event.preventDefault()
-    const title = taskName.trim()
-    if (!title) { alert('Please enter a task name'); return }
-
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    const name = taskName.trim()
+    if (!name) { setFormError('Task name is required'); return }
+    if (!resolvedProject) { setFormError('Please select a project'); return }
+    if (!resolvedTeam)    { setFormError('Please select a team');    return }
+    setCreating(true)
+    setFormError('')
     try {
-      setIsCreating(true)
-      const createdTask = await createTask({
-        name:           title,
-        project:        projectId,
-        team:           teamId,
-        owners:         selectedOwners,
-        tags,
-        timeToComplete: Number(timeToComplete) || 1,
-        dueDate:        dueDate || undefined,
+      const created = await createTask({
+        name, project: resolvedProject, team: resolvedTeam,
+        owners, tags, timeToComplete: Number(time) || 1,
+        dueDate: dueDate || undefined,
+        deadline: dueDate || undefined,
         status,
+        priority,
       })
-      addTask(createdTask)
+      addTask(created)
       closeModal()
-    } catch (error) {
-      console.error(error)
-      alert(error.response?.data?.message || 'Failed to create task')
+    } catch (err) {
+      setFormError(err.response?.data?.message || 'Failed to create task')
     } finally {
-      setIsCreating(false)
+      setCreating(false)
     }
   }
 
-  return (
-    <section className="page-section">
+  const allTags = [...new Set(filteredTasks.flatMap((t) => t.tags || []))]
 
-      {/* ── HEADER ───────────────────────────────────────── */}
-      <div className="tasks-header">
-        <div className="page-header">
-          <h1>Tasks</h1>
-          <p>
+  return (
+    <div className="tk">
+
+      <div className="tk__header">
+        <div>
+          <h1 className="tk__title">Tasks</h1>
+          <p className="tk__subtitle">
             {isLoading ? 'Loading tasks…' : error || 'Track task progress across your projects.'}
           </p>
         </div>
-        <button
-          type="button"
-          className="tasks-add-btn"
-          onClick={() => setIsModalOpen(true)}
-        >
-          + New Task
+        <button type="button" className="tk__new-btn" onClick={() => setModalOpen(true)}>
+          <FaPlus /><span>New Task</span>
         </button>
       </div>
 
-      {/* ── CREATE MODAL ─────────────────────────────────── */}
-      {isModalOpen && (
-        <div className="modal-backdrop" onClick={closeModal}>
-          <div
-            className="task-modal"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Create New Task"
-          >
-            <div className="modal-header">
-              <h2>Create New Task</h2>
-              <button type="button" className="modal-close-btn" onClick={closeModal}>✕</button>
+      <div className="tk__filters">
+        <div className="tk__filters-row">
+          <select className="tk__select" value={searchParams.get('status') || ''} onChange={(e) => updateFilter('status', e.target.value)}>
+            <option value="">All Statuses</option>
+            {taskStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className="tk__select" value={searchParams.get('project') || ''} onChange={(e) => updateFilter('project', e.target.value)}>
+            <option value="">All Projects</option>
+            {projects.map((p) => <option key={getEntityId(p)} value={p.title}>{p.title}</option>)}
+          </select>
+          <select className="tk__select" value={searchParams.get('team') || ''} onChange={(e) => updateFilter('team', e.target.value)}>
+            <option value="">All Teams</option>
+            {teams.map((t) => <option key={getEntityId(t)} value={t.name}>{t.name}</option>)}
+          </select>
+          <select className="tk__select" value={searchParams.get('owner') || ''} onChange={(e) => updateFilter('owner', e.target.value)}>
+            <option value="">All Owners</option>
+            {users.map((u) => <option key={getEntityId(u)} value={u.name}>{u.name}</option>)}
+          </select>
+          <select className="tk__select" value={searchParams.get('tags') || ''} onChange={(e) => updateFilter('tags', e.target.value)}>
+            <option value="">All Tags</option>
+            {allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+          </select>
+          <select className="tk__select" value={searchParams.get('sort') || ''} onChange={(e) => updateFilter('sort', e.target.value)}>
+            <option value="">Sort: Default</option>
+            <option value="dueDate">Sort: Due Date</option>
+            <option value="priority">Sort: Priority</option>
+          </select>
+          {searchParams.toString() && (
+            <button type="button" className="tk__clear-btn" onClick={() => setSearchParams({})}>
+              <FaXmark /> Clear
+            </button>
+          )}
+        </div>
+        <span className="tk__count">{visibleTasks.length} tasks</span>
+      </div>
+
+      <div className="tk__board">
+        {GROUPS.map((group) => {
+          const groupTasks = visibleTasks.filter((t) => toDisplayStatus(t.status) === group)
+          return (
+            <div key={group} className="tk__col">
+              <div className="tk__col-header">
+                <span className={`tk__col-dot tk__dot--${group.toLowerCase().replace(' ', '')}`} />
+                <h3 className="tk__col-title">{group}</h3>
+                <span className="tk__col-count">{groupTasks.length}</span>
+              </div>
+              <div className="tk__col-body">
+                {groupTasks.length === 0 ? (
+                  <div className="tk__col-empty">No tasks</div>
+                ) : (
+                  groupTasks.map((task) => (
+                    <div
+                      key={getEntityId(task)}
+                      className="tk__card"
+                      onClick={() => navigate(`/tasks/${getEntityId(task)}`)}
+                    >
+                      <div className="tk__card-top">
+                        <span className={`tk__dot ${statusDotClass(task.status)}`} />
+                        <p className="tk__card-name">{task.title || task.name}</p>
+                      </div>
+                      {task.dueDate && (
+                        <p className="tk__card-due">Due: {task.dueDate}</p>
+                      )}
+                      <div className="tk__card-footer">
+                        {task.assignee && (
+                          <span className="tk__card-avatar" title={task.assignee}>
+                            {initials(task.assignee)}
+                          </span>
+                        )}
+                        {(task.tags || []).slice(0, 2).map((tag) => (
+                          <span key={tag} className="tk__card-tag">{tag}</span>
+                        ))}
+                        <span className={`tk__chip ${priorityClass(task.priority)}`}>
+                          {task.priority || 'Medium'}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {modalOpen && (
+        <div className="tk__modal-backdrop" onClick={closeModal}>
+          <div className="tk__modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+
+            <div className="tk__modal-header">
+              <div>
+                <h2 className="tk__modal-title">
+                  Create New Task
+                  {resolvedProject && projects.find((p) => getEntityId(p) === resolvedProject) && (
+                    <span className="tk__modal-project">
+                      {' '}for {projects.find((p) => getEntityId(p) === resolvedProject)?.title}
+                    </span>
+                  )}
+                </h2>
+                <p className="tk__modal-sub">Fill in the details below</p>
+              </div>
+              <button type="button" className="tk__modal-close" onClick={closeModal}>
+                <FaXmark />
+              </button>
             </div>
 
-            <form className="modal-form" onSubmit={handleCreateTask}>
+            <form className="tk__form" onSubmit={handleCreate}>
 
-              <label className="modal-field">
-                <span>Task Name *</span>
+              <div className="tk__field">
+                <label className="tk__label">Task Name *</label>
                 <input
+                  className="tk__input"
                   type="text"
                   placeholder="Enter task name"
                   value={taskName}
                   onChange={(e) => setTaskName(e.target.value)}
-                  required
                   autoFocus
                 />
-              </label>
-
-              <div className="modal-row">
-                <label className="modal-field">
-                  <span>Project</span>
-                  <select value={projectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
-                    {projects.map((p) => (
-                      <option key={getEntityId(p)} value={getEntityId(p)}>{p.title}</option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="modal-field">
-                  <span>Team</span>
-                  <select value={teamId} onChange={(e) => setSelectedTeamId(e.target.value)}>
-                    {teams.map((t) => (
-                      <option key={getEntityId(t)} value={getEntityId(t)}>{t.name}</option>
-                    ))}
-                  </select>
-                </label>
               </div>
 
-              {/* OWNERS — multi-select chips */}
+              <div className="tk__field">
+                <label className="tk__label">Team</label>
+                <select className="tk__input" value={resolvedTeam} onChange={(e) => setTeamId(e.target.value)}>
+                  {teams.map((t) => (
+                    <option key={getEntityId(t)} value={getEntityId(t)}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+
               {users.length > 0 && (
-                <div className="modal-field">
-                  <span>Owners</span>
-                  <div className="modal-owners-grid">
-                    {users.map((user) => {
-                      const uid      = getEntityId(user)
-                      const selected = selectedOwners.includes(uid)
+                <div className="tk__field">
+                  <label className="tk__label">Owners</label>
+                  <div className="tk__owners">
+                    {users.map((u) => {
+                      const uid = getEntityId(u)
                       return (
                         <button
                           key={uid}
                           type="button"
-                          className={`owner-chip ${selected ? 'owner-chip--selected' : ''}`}
+                          className={`tk__owner-chip ${owners.includes(uid) ? 'tk__owner-chip--on' : ''}`}
                           onClick={() => toggleOwner(uid)}
                         >
-                          <span className="owner-chip-avatar">
-                            {String(user.name || 'U')[0].toUpperCase()}
-                          </span>
-                          <span>{user.name}</span>
+                          <span className="tk__owner-avatar">{initials(u.name)}</span>
+                          <span>{u.name}</span>
                         </button>
                       )
                     })}
@@ -234,49 +293,44 @@ const Tasks = () => {
                 </div>
               )}
 
-              {/* TAGS — chip input (press Enter or comma) */}
-              <div className="modal-field">
-                <span>Tags (press Enter or comma to add)</span>
+              <div className="tk__field">
+                <label className="tk__label">Tags (Enter or comma to add)</label>
                 <TagInput tags={tags} onChange={setTags} />
               </div>
 
-              <div className="modal-row">
-                <label className="modal-field">
-                  <span>Due Date</span>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                  />
-                </label>
-
-                <label className="modal-field">
-                  <span>Time (Days)</span>
-                  <input
-                    type="number"
-                    min="1"
-                    value={timeToComplete}
-                    onChange={(e) => setTimeToComplete(e.target.value)}
-                  />
-                </label>
+              <div className="tk__form-row">
+                <div className="tk__field">
+                  <label className="tk__label">Due Date</label>
+                  <input className="tk__input" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </div>
+                <div className="tk__field">
+                  <label className="tk__label">Time (Days)</label>
+                  <input className="tk__input" type="number" min="1" value={time} onChange={(e) => setTime(e.target.value)} />
+                </div>
               </div>
 
-              <label className="modal-field">
-                <span>Status</span>
-                <select value={status} onChange={(e) => setStatus(e.target.value)}>
-                  {taskStatusOptions.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
-                  ))}
-                </select>
-              </label>
+              <div className="tk__form-row">
+                <div className="tk__field">
+                  <label className="tk__label">Priority</label>
+                  <select className="tk__input" value={priority} onChange={(e) => setPriority(e.target.value)}>
+                    {PRIORITY.map((p) => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="tk__field">
+                  <label className="tk__label">Status</label>
+                  <select className="tk__input" value={status} onChange={(e) => setStatus(e.target.value)}>
+                    {taskStatusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
 
-              <div className="modal-actions">
-                <button type="submit" className="tasks-add-btn" disabled={isCreating}>
-                  {isCreating ? 'Creating…' : 'Create Task'}
+              {formError && <p className="tk__form-error">{formError}</p>}
+
+              <div className="tk__form-actions">
+                <button type="submit" className="tk__submit-btn" disabled={creating}>
+                  {creating ? 'Creating…' : 'Create Task'}
                 </button>
-                <button type="button" className="modal-cancel-btn" onClick={closeModal}>
-                  Cancel
-                </button>
+                <button type="button" className="tk__cancel-btn" onClick={closeModal}>Cancel</button>
               </div>
 
             </form>
@@ -284,150 +338,7 @@ const Tasks = () => {
         </div>
       )}
 
-      {/* ── FILTERS ──────────────────────────────────────── */}
-      <div className="task-filter-panel">
-        <div className="task-filter-header">
-          <h2 className="task-filter-title">Filters</h2>
-          {hasFilters && (
-            <button type="button" className="toolbar-clear-btn" onClick={clearFilters}>
-              Clear all
-            </button>
-          )}
-        </div>
-
-        <div className="filter-grid">
-
-          {/* Owner — dropdown from users list */}
-          <label>
-            <span>Owner</span>
-            <select
-              value={searchParams.get('owner') || ''}
-              onChange={(e) => updateFilter('owner', e.target.value)}
-            >
-              <option value="">All Owners</option>
-              {users.map((u) => (
-                <option key={getEntityId(u)} value={u.name}>
-                  {u.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {/* Team — dropdown from teams list */}
-          <label>
-            <span>Team</span>
-            <select
-              value={searchParams.get('team') || ''}
-              onChange={(e) => updateFilter('team', e.target.value)}
-            >
-              <option value="">All Teams</option>
-              {teams.map((t) => (
-                <option key={getEntityId(t)} value={t.name}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {/* Tags — multi-select chip filter */}
-          <label>
-            <span>Tag</span>
-            <select
-              value={searchParams.get('tags') || ''}
-              onChange={(e) => updateFilter('tags', e.target.value)}
-            >
-              <option value="">All Tags</option>
-              {[
-                ...new Set(
-                  filteredTasks.flatMap((t) => t.tags || []),
-                ),
-              ].map((tag) => (
-                <option key={tag} value={tag}>{tag}</option>
-              ))}
-            </select>
-          </label>
-
-          {/* Project — dropdown from projects list */}
-          <label>
-            <span>Project</span>
-            <select
-              value={searchParams.get('project') || ''}
-              onChange={(e) => updateFilter('project', e.target.value)}
-            >
-              <option value="">All Projects</option>
-              {projects.map((p) => (
-                <option key={getEntityId(p)} value={p.title}>
-                  {p.title}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            <span>Status</span>
-            <select
-              value={searchParams.get('status') || ''}
-              onChange={(e) => updateFilter('status', e.target.value)}
-            >
-              <option value="">All Statuses</option>
-              {taskStatusOptions.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            <span>Sort by</span>
-            <select
-              value={searchParams.get('sort') || ''}
-              onChange={(e) => updateFilter('sort', e.target.value)}
-            >
-              <option value="">Default</option>
-              <option value="dueDate">Due Date</option>
-              <option value="priority">Priority</option>
-            </select>
-          </label>
-
-        </div>
-      </div>
-
-      {/* ── KANBAN BOARD ─────────────────────────────────── */}
-      <div className="task-board-wrapper">
-        <div className="task-board-title-row">
-          <h2 className="task-board-title">Task Board</h2>
-          <span className="task-board-count">{visibleTasks.length} tasks</span>
-        </div>
-
-        <div className="task-board">
-          {TASK_GROUPS.map((group) => {
-            const groupTasks = visibleTasks.filter(
-              (task) => toDisplayStatus(task.status) === group,
-            )
-            return (
-              <section className="task-column" key={group}>
-                <div className="task-column__header">
-                  <h3>{group}</h3>
-                  <span className="task-column__count">{groupTasks.length}</span>
-                </div>
-                <div className="task-column__list">
-                  {groupTasks.length > 0 ? (
-                    groupTasks.map((task) => (
-                      <TaskCard task={task} key={getEntityId(task)} />
-                    ))
-                  ) : (
-                    <div className="empty-column">
-                      <strong>No tasks</strong>
-                      <p>Nothing here yet.</p>
-                    </div>
-                  )}
-                </div>
-              </section>
-            )
-          })}
-        </div>
-      </div>
-
-    </section>
+    </div>
   )
 }
 
