@@ -35,21 +35,12 @@ const toDateInputValue = (dateStr) => {
   if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
     return dateStr.slice(0, 10)
   }
-
   const date = new Date(dateStr)
   if (Number.isNaN(date.getTime())) return ''
-
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-const resolveOwner = (owner, users) => {
-  if (!owner) return null
-  if (typeof owner === 'object' && owner.name) return owner.name
-  const found = users.find((u) => isSameEntityId(getEntityId(u), String(owner)))
-  return found?.name || String(owner)
 }
 
 const initials = (name) =>
@@ -62,20 +53,14 @@ const TagInput = ({ tags, onChange }) => {
       .split(',')
       .map((tag) => tag.trim())
       .filter((tag) => tag && !tags.includes(tag))
-
-    if (nextTags.length) {
-      onChange([...tags, ...nextTags])
-    }
-
+    if (nextTags.length) onChange([...tags, ...nextTags])
     setInput('')
   }
-
   const handleKeyDown = (e) => {
     if (e.key !== 'Enter' && e.key !== ',') return
     e.preventDefault()
     addTags(input)
   }
-
   return (
     <div className="tdd__tag-input">
       {tags.map((tag) => (
@@ -113,24 +98,24 @@ const TaskDetails = () => {
     t.name === task?.team?.name || t.name === task?.team
   )
 
-  const [editing, setEditing]       = useState(false)
-  const [saving, setSaving]         = useState(false)
-  const [formError, setFormError]   = useState('')
-  const [editName, setEditName]     = useState('')
-  const [editProject, setEditProject] = useState('')
-  const [editTeam, setEditTeam]     = useState('')
-  const [editOwners, setEditOwners] = useState([])
-  const [editTags, setEditTags]     = useState([])
-  const [editTime, setEditTime]     = useState('')
-  const [editDue, setEditDue]       = useState('')
-  const [editStatus, setEditStatus] = useState('')
+  const [editing, setEditing]           = useState(false)
+  const [saving, setSaving]             = useState(false)
+  const [formError, setFormError]       = useState('')
+  const [editName, setEditName]         = useState('')
+  const [editProject, setEditProject]   = useState('')
+  const [editTeam, setEditTeam]         = useState('')
+  const [editOwners, setEditOwners]     = useState([])
+  const [editTags, setEditTags]         = useState([])
+  const [editTime, setEditTime]         = useState('')
+  const [editDue, setEditDue]           = useState('')
+  const [editStatus, setEditStatus]     = useState('')
   const [editPriority, setEditPriority] = useState('Medium')
 
   const openEdit = () => {
     setEditName(task.title || task.name || '')
     setEditProject(getEntityId(project) || task?.project?._id || task?.project || '')
     setEditTeam(getEntityId(team) || task?.team?._id || task?.team || '')
-    setEditOwners((task.owners || []).map((o) => typeof o === 'object' ? getEntityId(o) : o))
+    setEditOwners(task.owners || [])
     setEditTags(task.tags || [])
     setEditTime(String(task.timeToComplete || ''))
     setEditDue(toDateInputValue(getTaskDueDate(task)))
@@ -140,8 +125,11 @@ const TaskDetails = () => {
     setEditing(true)
   }
 
-  const toggleOwner = (uid) =>
-    setEditOwners((prev) => prev.includes(uid) ? prev.filter((id) => id !== uid) : [...prev, uid])
+  // owners are name strings — toggle by name
+  const toggleOwner = (name) =>
+    setEditOwners((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    )
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -150,16 +138,16 @@ const TaskDetails = () => {
     setFormError('')
     try {
       const payload = {
-        name: editName.trim(),
-        project: editProject || undefined,
-        team: editTeam || undefined,
-        owners: editOwners,
-        tags: editTags,
+        name:           editName.trim(),
+        project:        editProject || undefined,
+        team:           editTeam || undefined,
+        owners:         editOwners,
+        tags:           editTags,
         timeToComplete: Number(editTime) || 0,
-        dueDate: editDue || '',
-        deadline: editDue || '',
-        status: editStatus,
-        priority: editPriority,
+        dueDate:        editDue || '',
+        deadline:       editDue || '',
+        status:         editStatus,
+        priority:       editPriority,
       }
       const updated = await updateTask(getEntityId(task), payload)
       updateTaskInStore(getEntityId(task), {
@@ -188,8 +176,8 @@ const TaskDetails = () => {
       const currentDueDate = getTaskDueDate(task)
       updateTaskInStore(getEntityId(task), {
         ...updated,
-        tags: updated.tags?.length ? updated.tags : task.tags || [],
-        dueDate: updated.dueDate || currentDueDate,
+        tags:     updated.tags?.length ? updated.tags : task.tags || [],
+        dueDate:  updated.dueDate || currentDueDate,
         deadline: updated.deadline || task.deadline || currentDueDate,
       })
     } catch (err) {
@@ -216,7 +204,7 @@ const TaskDetails = () => {
   const isCompleted   = displayStatus === 'Completed'
   const projectName   = project?.title || task?.project?.title || task?.project?.name || (typeof task?.project === 'string' && task.project.length < 30 ? task.project : null)
   const teamName      = team?.name || task?.team?.name || (typeof task?.team === 'string' && task.team.length < 30 ? task.team : null)
-  const ownerNames    = (task.owners || []).map((o) => resolveOwner(o, users)).filter(Boolean)
+  const ownerNames    = (task.owners || []).filter(Boolean)
 
   return (
     <div className="tdd">
@@ -372,17 +360,17 @@ const TaskDetails = () => {
                 <div className="tdd__field">
                   <label className="tdd__label">Owners</label>
                   <div className="tdd__owners">
-                    {users.map((u) => {
-                      const uid = getEntityId(u)
-                      return (
-                        <button key={uid} type="button"
-                          className={`tdd__owner-chip ${editOwners.includes(uid) ? 'tdd__owner-chip--on' : ''}`}
-                          onClick={() => toggleOwner(uid)}>
-                          <span className="tdd__owner-chip-avatar">{initials(u.name)}</span>
-                          <span>{u.name}</span>
-                        </button>
-                      )
-                    })}
+                    {users.map((u) => (
+                      <button
+                        key={getEntityId(u)}
+                        type="button"
+                        className={`tdd__owner-chip ${editOwners.includes(u.name) ? 'tdd__owner-chip--on' : ''}`}
+                        onClick={() => toggleOwner(u.name)}
+                      >
+                        <span className="tdd__owner-chip-avatar">{initials(u.name)}</span>
+                        <span>{u.name}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}

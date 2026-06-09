@@ -45,6 +45,17 @@ const shouldTryFallbackMethod = (error) => {
   return status === 404 || status === 405
 }
 
+const normalizeOwners = (owners) => {
+  if (!Array.isArray(owners)) return []
+  return owners
+    .map((o) =>
+      typeof o === 'object'
+        ? (o.name || o.fullName || o.username || o.email || String(o._id || ''))
+        : String(o)
+    )
+    .filter(Boolean)
+}
+
 const normalizeTask = (task) => ({
   ...task,
   title:          task?.title          || task?.name || '',
@@ -53,7 +64,7 @@ const normalizeTask = (task) => ({
   priority:       task?.priority       || 'Medium',
   project:        task?.project        ?? null,
   team:           task?.team           ?? null,
-  owners:         Array.isArray(task?.owners) ? task.owners : [],
+  owners:         normalizeOwners(task?.owners),
   tags:           normalizeTags(task?.tags),
   dueDate:        getTaskDate(task),
   deadline:       task?.deadline || getTaskDate(task),
