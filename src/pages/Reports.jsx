@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { FaArrowLeft } from 'react-icons/fa6'
 import { Chart, registerables } from 'chart.js'
 import { useWorkspaceData } from '../hooks/useWorkspaceData'
-import { toDisplayStatus, getTaskProjectName, getTaskTeamName } from '../utils/taskUtils'
+import { toDisplayStatus } from '../utils/taskUtils'
 
 Chart.register(...registerables)
 
@@ -42,6 +42,26 @@ const barOpts = {
   elements: { bar: { borderRadius: 5 } },
 }
 
+// Safely extract team name from a task regardless of whether team is object or string
+const resolveTeamName = (task) => {
+  const team = task.team
+  if (!team) return 'Unknown'
+  if (typeof team === 'string') return team.length < 40 ? team : 'Unknown'
+  return team.name || team.title || 'Unknown'
+}
+
+// Resolve all owners for a task — uses owners[] array (name strings), falls back to assignee
+const resolveOwnerNames = (task) => {
+  const owners = (task.owners || []).filter(Boolean)
+  if (owners.length > 0) return owners
+
+  const assignee = typeof task.assignee === 'object'
+    ? (task.assignee?.name || task.assignee?.username || null)
+    : (task.assignee || null)
+
+  return assignee ? [assignee] : ['Unassigned']
+}
+
 const Reports = () => {
   const navigate = useNavigate()
   const { tasks, isLoading } = useWorkspaceData()
@@ -56,14 +76,15 @@ const Reports = () => {
 
   const teamCounts = {}
   completed.forEach((t) => {
-    const name = getTaskTeamName(t) || 'Unknown'
+    const name = resolveTeamName(t)
     teamCounts[name] = (teamCounts[name] || 0) + 1
   })
 
   const ownerCounts = {}
   completed.forEach((t) => {
-    const name = t.assignee || 'Unassigned'
-    ownerCounts[name] = (ownerCounts[name] || 0) + 1
+    resolveOwnerNames(t).forEach((name) => {
+      ownerCounts[name] = (ownerCounts[name] || 0) + 1
+    })
   })
 
   const pendingTasks = pending.slice(0, 8)
